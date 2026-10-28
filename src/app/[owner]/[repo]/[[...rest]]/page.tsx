@@ -3,6 +3,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { TrailApp } from "@/components/trail/trail-app";
+import { env } from "@/env";
+import { normalScope, scopeString } from "@/lib/scope";
 import { parseRepoInput } from "@/lib/ref";
 import { storedPull } from "@/server/trail/pulls";
 import { storedOverview } from "@/server/trail/service";
@@ -42,8 +44,11 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
   };
 }
 
-export default async function TrailPage({ params }: { params: Promise<Params> }) {
+export default async function TrailPage({ params, searchParams }: { params: Promise<Params>; searchParams: Promise<{ only?: string; skip?: string }> }) {
   const { owner, repo, rest } = await params;
+  const { only, skip } = await searchParams;
+  // ?only=src,lib&skip=docs: a read of just those folders.
+  const scope = scopeString(normalScope({ only: only?.split(",") ?? [], skip: skip?.split(",") ?? [] }));
   const parsed = parseRepoInput([owner, repo, ...(rest ?? [])].map(decodeURIComponent).join("/"));
   if (!parsed) notFound();
   const overview = await storedOverview(parsed.owner, parsed.repo).catch(() => null);
@@ -60,7 +65,7 @@ export default async function TrailPage({ params }: { params: Promise<Params> })
   return (
     <>
       {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />}
-      <TrailApp owner={parsed.owner} repo={parsed.repo} gitRef={parsed.ref} initialFile={parsed.path} pull={parsed.pull} />
+      <TrailApp owner={parsed.owner} repo={parsed.repo} gitRef={parsed.ref} initialFile={parsed.path} pull={parsed.pull} siteUrl={env.SITE_URL} scope={scope} />
     </>
   );
 }

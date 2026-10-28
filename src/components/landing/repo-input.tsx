@@ -17,7 +17,7 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
     e.preventDefault();
     const ref = parseRepoInput(value);
     if (!ref) {
-      setError("That isn't a GitHub repository link. Try https://github.com/owner/repo.");
+      setError("That isn't a GitHub repository, branch, file or pull-request link. Try https://github.com/owner/repo.");
       return;
     }
     router.push(repoPath(ref));
@@ -37,7 +37,7 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
             setError(null);
           }}
           onPaste={(e) => {
-            // A pasted link starts the hike right away.
+            // A pasted link opens the repo right away.
             const text = e.clipboardData.getData("text");
             const ref = parseRepoInput(text);
             if (ref) {
@@ -55,7 +55,7 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
           className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-[15px] text-fg outline-none placeholder:text-fg-3"
         />
         <button type="submit" className="shrink-0 bg-trail px-5 font-display text-[13px] font-bold tracking-wide text-[#16171a] transition hover:bg-trail-strong sm:px-6 [font-stretch:90%]">
-          START THE HIKE →
+          READ THIS REPO →
         </button>
       </div>
       {error ? (

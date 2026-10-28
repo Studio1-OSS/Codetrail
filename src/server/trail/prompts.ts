@@ -58,7 +58,7 @@ For every step:
 export const ATLAS_TASK = `Map this repository, then walk through its main flow.
 
 1. summary: what it is and how it is built, in 2-3 sentences.
-2. nodes: split the code into 4-14 modules a developer would recognise (by responsibility, not by folder alone). List each module's most important files with exact paths.
+2. nodes: split the code into 4-14 modules a developer would recognise (by responsibility, not by folder alone). List each module's most important files with exact paths, and the architecture layer it sits in (3-6 layers, like the boxes on an architecture diagram).
 3. edges: which modules call, import or feed which. Prefer connections the import graph confirms; add runtime ones (HTTP, events, queues) only when the code shows them.
 4. tours: 3-5 concrete questions a newcomer would ask, answered by following the code, e.g. "What happens when a request hits the server?" or "How does a CLI command run end to end?". The first one is the main flow of the project. Write only the question (under 20 words).
 5. firstTour: the guided tour that answers the first question in tours. Use the module ids from nodes.

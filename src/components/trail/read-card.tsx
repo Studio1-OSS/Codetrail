@@ -1,20 +1,22 @@
 "use client";
 
-import { FileSearch, Image as ImageIcon, Play, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { FileSearch, Image as ImageIcon, Play, Square, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { formatTokens, formatUsd, perMillion } from "@/lib/format";
 import { LOCAL_OWNER } from "@/lib/ref";
 import type { RepoSummary } from "@/lib/schemas";
 import { KIND_COLOR, SUPPORT } from "@/lib/palette";
 import { GraphView, type GraphEdge, type GraphNode } from "./graph";
+import { useModal } from "./dialog";
 import { Treemap } from "./treemap";
+import { inScope, normalScope, parseScope, scopeLabel, scopeQuery, type Scope } from "@/lib/scope";
 
 const CONTEXT = 1_048_576;
 
 /** Rough wall-clock for the first read (map + main tour), from our runs: ~15-25s at 250-450K tokens. */
 const expectedSeconds = (tokens: number) => Math.round(12 + tokens / 25_000);
 
-export function ReadCard({ summary, onRead, busy }: { summary: RepoSummary; onRead: () => void; busy: boolean }) {
+export function ReadCard({ summary, onRead }: { summary: RepoSummary; onRead: () => void }) {
   const [files, setFiles] = useState(false);
   const used = Math.max(1, Math.round((summary.tokens / CONTEXT) * 100));
   return (
@@ -78,6 +80,8 @@ export function ReadCard({ summary, onRead, busy }: { summary: RepoSummary; onRe
             </div>
           </section>
 
+          <FolderPicker summary={summary} />
+
           <section className="grid grid-cols-2 border-t border-line sm:grid-cols-4">
             {[
               { v: `${summary.files.read}`, l: `files to read, of ${summary.files.total}` },
@@ -93,17 +97,16 @@ export function ReadCard({ summary, onRead, busy }: { summary: RepoSummary; onRe
           </section>
         </div>
 
-        <aside className="min-w-0 flex-[1_1_340px] space-y-6">
+        <aside className="min-w-0 flex-[1_1_340px] space-y-6 max-md:order-first">
           <div className="rounded-card border border-line bg-panel p-6">
             <p className="text-[13px] text-fg-3">Map + main tour, one read, estimated</p>
             <p className="mt-1 font-display text-[44px] font-medium tracking-[-0.04em] [font-stretch:80%]">≈ {formatUsd(summary.estimate.firstRead)}</p>
             <p className="mt-2 text-[13.5px] leading-relaxed text-fg-2">
               Then ≈ {formatUsd(summary.estimate.followUp)} per extra tour while the repo is in cache, up to ≈ {formatUsd(summary.estimate.followUpCold)}{" "}
-              if it isn&apos;t yet. Saved tours replay free for everyone.
+              if it isn&apos;t yet. Saved tours replay free.
             </p>
             <button
               onClick={onRead}
-              disabled={busy}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-[12px] bg-trail px-4 py-3.5 font-display text-[14px] font-bold tracking-wide text-[#16171a] transition hover:bg-trail-strong disabled:opacity-60 [font-stretch:90%]"
             >
               <Play className="size-4 fill-current" /> READ THE REPO · ~{expectedSeconds(summary.tokens)}s
@@ -139,16 +142,13 @@ const REASON: Record<string, string> = {
   too_large: "over 200 KB",
   minified: "minified",
   secret: "looks like it holds credentials",
+  scope: "outside the chosen folders",
 };
 
 export function FilesDrawer({ open, onClose, summary }: { open: boolean; onClose: () => void; summary: RepoSummary }) {
   const [tab, setTab] = useState<"read" | "compressed" | "budget" | "skipped">("read");
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const panel = useRef<HTMLElement>(null);
+  useModal(panel, onClose, open);
   if (!open) return null;
   const tabs = [
     { id: "read" as const, label: `Read (${summary.files.read})` },
@@ -158,8 +158,8 @@ export function FilesDrawer({ open, onClose, summary }: { open: boolean; onClose
   ];
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Close" className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-lg flex-col border-l border-line bg-night">
+      <button aria-label="Close" tabIndex={-1} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
+      <aside ref={panel} role="dialog" aria-modal="true" aria-label="What the model reads" tabIndex={-1} className="relative flex h-full w-full max-w-lg flex-col border-l border-line bg-night outline-none">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
             <h2 className="font-display text-[20px] font-medium tracking-tight [font-stretch:85%]">What the model reads</h2>
@@ -190,7 +190,18 @@ export function FilesDrawer({ open, onClose, summary }: { open: boolean; onClose
           {tab === "compressed" && (summary.compressed.length ? summary.compressed.map((p) => <Row key={p} path={p} note="signatures only" />) : <Empty />)}
           {tab === "budget" && (summary.overBudget.length ? summary.overBudget.map((p) => <Row key={p} path={p} />) : <Empty />)}
           {tab === "skipped" &&
-            (summary.skippedSample.length ? summary.skippedSample.map((s) => <Row key={s.path} path={s.path} note={REASON[s.reason] ?? s.reason} />) : <Empty />)}
+            (summary.skippedSample.length ? (
+              <>
+                {summary.skippedSample.map((s) => <Row key={s.path} path={s.path} note={REASON[s.reason] ?? s.reason} />)}
+                {summary.skippedSample.length < summary.files.skipped && (
+                  <li className="py-2 font-sans text-fg-3">
+                    Showing {summary.skippedSample.length.toLocaleString()} of {summary.files.skipped.toLocaleString()} skipped files.
+                  </li>
+                )}
+              </>
+            ) : (
+              <Empty />
+            ))}
         </ul>
       </aside>
     </div>
@@ -225,9 +236,16 @@ export type LiveRead = {
  * While the model reads: elapsed time, a "thinking" counter, then the map building itself live as modules,
  * links and tour steps stream in. Without a stream it still shows the files going by.
  */
-export function Reading({ summary, label, live }: { summary: RepoSummary; label: string; live?: LiveRead | null }) {
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+// After this long with no new output, say so instead of looking busy.
+const QUIET_S = 25;
+
+export function Reading({ summary, label, live, onStop }: { summary: RepoSummary; label: string; live?: LiveRead | null; onStop?: () => void }) {
   const [elapsed, setElapsed] = useState(0);
   const [tick, setTick] = useState(0);
+  const [lastOutput, setLastOutput] = useState(0);
+  const outputSize = (live?.chars ?? 0) + (live?.thinkingChars ?? 0);
+  useEffect(() => setLastOutput(Date.now()), [outputSize]);
   useEffect(() => {
     const started = Date.now();
     const t = setInterval(() => setElapsed((Date.now() - started) / 1000), 200);
@@ -246,9 +264,9 @@ export function Reading({ summary, label, live }: { summary: RepoSummary; label:
   const stage = !live || (live.chars === 0 && live.thinkingChars === 0) ? "reading" : live.chars === 0 ? "thinking" : live.steps.length ? "tour" : nodes.length ? "mapping" : "writing";
   const STAGES = [
     { id: "reading", text: `Reading ${summary.files.read} files (${formatTokens(summary.tokens)} tokens)` },
-    { id: "thinking", text: live?.thinkingChars ? `Thinking · ${Math.round(live.thinkingChars / 3.6).toLocaleString()} tokens` : "Thinking" },
+    { id: "thinking", text: live?.thinkingChars ? `Thinking · ≈ ${Math.round(live.thinkingChars / 3.6).toLocaleString()} tokens` : "Thinking" },
     { id: "mapping", text: `Mapping modules · ${nodes.length}` },
-    { id: "tour", text: `Tracing the main flow · ${live?.steps.length ?? 0} steps` },
+    { id: "tour", text: `Writing the main tour · ${live?.steps.length ?? 0} steps` },
   ];
   const order = ["reading", "thinking", "writing", "mapping", "tour"];
   const at = order.indexOf(stage);
@@ -262,13 +280,26 @@ export function Reading({ summary, label, live }: { summary: RepoSummary; label:
             {summary.modelLabel} <span className="font-extrabold [font-stretch:105%]">is reading.</span>
           </h1>
         </div>
-        <p className="font-mono text-[12px] text-fg-3">
-          {elapsed.toFixed(1)}s · usually ~{expected}s
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="font-mono text-[12px] text-fg-3" aria-live="off">
+            {clock(elapsed)} · usually ~{expected}s
+          </p>
+          {onStop && (
+            <button onClick={onStop} className="inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-panel px-3 py-1.5 font-mono text-[12px] text-fg-2 hover:border-danger/60 hover:text-fg">
+              <Square className="size-3 fill-current" /> Stop
+            </button>
+          )}
+        </div>
       </div>
+      {/* No real percentage exists for one model call, so the bar only says "working". */}
       <div className="mt-5 h-1 overflow-hidden rounded-full bg-line">
-        <div className="h-full rounded-full bg-trail transition-[width] duration-200" style={{ width: `${Math.min(96, (elapsed / expected) * 100)}%` }} />
+        <div className="indeterminate h-full w-1/3 rounded-full bg-trail" />
       </div>
+      {elapsed > QUIET_S && lastOutput && (Date.now() - lastOutput) / 1000 > QUIET_S && (
+        <p role="status" className="mt-2 font-mono text-[11.5px] text-fg-3">
+          Still working · no new output for {Math.round((Date.now() - lastOutput) / 1000)}s. Big repos can take a while before the first words.
+        </p>
+      )}
 
       <div className="mt-8 flex flex-wrap gap-8">
         <div className="relative h-[460px] min-w-0 flex-[999_1_560px] overflow-hidden rounded-card border border-line dot-grid">
@@ -336,5 +367,102 @@ export function Reading({ summary, label, live }: { summary: RepoSummary; label:
         </div>
       </div>
     </div>
+  );
+}
+
+/** Folders with their share of what would be sent: the top level, and one level down where a folder splits up. */
+function foldersOf(summary: RepoSummary) {
+  const tokens = new Map<string, number>();
+  const add = (dir: string, t: number) => tokens.set(dir, (tokens.get(dir) ?? 0) + t);
+  for (const [path, , t] of summary.fileSizes) {
+    const parts = path.split("/");
+    if (parts.length < 2) continue;
+    add(parts[0], t);
+    if (parts.length > 2) add(`${parts[0]}/${parts[1]}`, t);
+  }
+  const total = summary.fileSizes.reduce((a, [, , t]) => a + t, 0) || 1;
+  const top = [...tokens].filter(([d]) => !d.includes("/")).sort((a, b) => b[1] - a[1]);
+  return top.flatMap(([dir, t]) => {
+    const subs = [...tokens].filter(([d, n]) => d.startsWith(`${dir}/`) && n / total > 0.03).sort((a, b) => b[1] - a[1]);
+    return [{ dir, tokens: t, depth: 0 }, ...(subs.length >= 2 ? subs.slice(0, 12).map(([d, n]) => ({ dir: d, tokens: n, depth: 1 })) : [])];
+  });
+}
+
+/**
+ * Read only some folders (DeepWiki-style include/exclude): untick folders to skip them, or name the ones to keep.
+ * The estimate follows as you choose; Apply opens that read, which is stored apart from the full one.
+ */
+function FolderPicker({ summary }: { summary: RepoSummary }) {
+  const current = parseScope(summary.scope);
+  const [open, setOpen] = useState(!!current);
+  const [skip, setSkip] = useState<string[]>(current?.skip ?? []);
+  const [only, setOnly] = useState((current?.only ?? []).join(", "));
+  const folders = foldersOf(summary);
+  const draft: Scope | null = normalScope({ only: only.split(","), skip });
+  const kept = summary.fileSizes.filter(([p]) => inScope(p, draft)).reduce((a, [, , t]) => a + t, 0);
+  const all = summary.fileSizes.reduce((a, [, , t]) => a + t, 0) || 1;
+  const p = summary.price;
+  // The files kept, plus the rest of the prompt (instructions, the import graph, files sent as signatures).
+  const tokens = Math.round(kept + Math.max(0, summary.tokens - all));
+  const cost = p ? tokens * p.input + 8_000 * p.output : null;
+  const changed = JSON.stringify(draft) !== JSON.stringify(current);
+  if (!folders.length) return null;
+  return (
+    <section>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full flex-wrap items-baseline justify-between gap-3 border-b border-line pb-3 text-left">
+        <h2 className="font-medium">Choose folders {current ? <span className="ml-2 font-mono text-[12px] text-trail">{scopeLabel(current)}</span> : null}</h2>
+        <span className="font-mono text-[12px] text-fg-3">{open ? "hide" : "read only part of the repo →"}</span>
+      </button>
+      {open && (
+        <div className="mt-4 space-y-4">
+          <p className="text-[13px] text-fg-3">Untick folders to leave them out, or name the only ones to read. A read of some folders is its own read: the full one stays as it is.</p>
+          <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {folders.map((f) => {
+              const parentOff = f.depth === 1 && skip.includes(f.dir.split("/")[0]);
+              const on = !skip.includes(f.dir) && !parentOff && inScope(`${f.dir}/x`, normalScope({ only: only.split(","), skip: [] }));
+              return (
+                <li key={f.dir} className={f.depth ? "pl-5" : ""}>
+                  <label className="flex items-center gap-2 py-0.5 font-mono text-[12.5px] text-fg-2">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={parentOff}
+                      onChange={(e) => setSkip((was) => (e.target.checked ? was.filter((d) => d !== f.dir) : [...was, f.dir]))}
+                      className="accent-[var(--color-trail)]"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{f.dir}/</span>
+                    <span className="text-fg-3">{formatTokens(f.tokens)}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <label className="block">
+            <span className="font-mono text-[11px] text-fg-3">Only these folders or globs, comma-separated (empty: all of them)</span>
+            <input value={only} onChange={(e) => setOnly(e.target.value)} placeholder="e.g. src, packages/core" className="mt-1 w-full rounded-[10px] border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-3 focus:border-trail/60" />
+          </label>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-line bg-panel px-4 py-3">
+            <p className="font-mono text-[12.5px] text-fg-2">
+              {scopeLabel(draft) ?? "Everything"} · ≈ {formatTokens(tokens)} tokens{cost !== null ? ` · first read ≈ ${formatUsd(cost)}` : ""}
+              <span className="block text-[11px] text-fg-3">{current ? "Counted from the folders in this read; exact numbers after Apply." : "Exact numbers after Apply."}</span>
+            </p>
+            <span className="flex gap-2">
+              {current && (
+                <a href={`/${summary.owner}/${summary.repo}`} className="rounded-[10px] px-3 py-1.5 text-[13px] text-fg-2 hover:text-fg">
+                  Read everything
+                </a>
+              )}
+              <button
+                disabled={!changed}
+                onClick={() => window.location.assign(`/${summary.owner}/${summary.repo}${scopeQuery(draft)}`)}
+                className="rounded-[10px] bg-trail px-3 py-1.5 text-[13px] font-semibold text-[#16171a] disabled:opacity-40"
+              >
+                Apply
+              </button>
+            </span>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

@@ -5,7 +5,8 @@
 import { ChevronRight, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatTokens } from "@/lib/format";
-import { KIND_COLOR, SUPPORT } from "@/lib/palette";
+import { groupsOf } from "@/lib/architecture";
+import { SUPPORT } from "@/lib/palette";
 import type { Atlas, RepoSummary } from "@/lib/schemas";
 import { nodeForFile } from "@/server/trail/ground";
 
@@ -40,8 +41,8 @@ export function FileBrowser({ summary, atlas, onOpen, onClose, tall }: { summary
   const total = summary.fileSizes.length + (summary.otherFiles?.length ?? 0);
   const colorOf = useMemo(() => {
     const nodes = atlas.nodes.map((n) => ({ id: n.id, files: n.files }));
-    const kind = new Map(atlas.nodes.map((n) => [n.id, n.kind]));
-    return (path: string) => KIND_COLOR[kind.get(nodeForFile(path, nodes) ?? "") ?? ""] ?? SUPPORT;
+    const color = groupsOf(atlas.nodes).color;
+    return (path: string) => color.get(nodeForFile(path, nodes) ?? "") ?? SUPPORT;
   }, [atlas]);
 
   useEffect(() => input.current?.focus(), []);
@@ -52,7 +53,7 @@ export function FileBrowser({ summary, atlas, onOpen, onClose, tall }: { summary
     }
     const t = setTimeout(() => {
       setLoading(true);
-      fetch(`/api/search?owner=${summary.owner}&repo=${summary.repo}&sha=${summary.sha}&q=${encodeURIComponent(q.trim())}`)
+      fetch(`/api/search?${new URLSearchParams({ owner: summary.owner, repo: summary.repo, sha: summary.sha, ...(summary.scope ? { scope: summary.scope } : {}), q: q.trim() })}`)
         .then((r) => r.json())
         .then((d: { hits?: Hit[] }) => setHits(d.hits ?? []))
         .catch(() => setHits([]))
@@ -62,14 +63,16 @@ export function FileBrowser({ summary, atlas, onOpen, onClose, tall }: { summary
   }, [q, summary]);
 
   return (
-    <div className={`flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-panel ${tall ? "max-h-[60vh]" : "max-h-[42vh]"}`}>
+    <div
+      onKeyDown={(e) => e.key === "Escape" && onClose()}
+      className={`flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-panel ${tall ? "max-h-[60vh]" : "max-h-[34vh]"}`}
+    >
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <Search className="size-3.5 shrink-0 text-fg-3" />
         <input
           ref={input}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Escape" && onClose()}
           placeholder={`Search all ${total} files by path or code`}
           aria-label="Search files"
           className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-3"
@@ -82,7 +85,7 @@ export function FileBrowser({ summary, atlas, onOpen, onClose, tall }: { summary
       <div className="min-h-0 flex-1 overflow-y-auto py-1 font-mono text-[12px]">
         {hits ? (
           hits.length === 0 ? (
-            <p className="px-3 py-2 text-fg-3">No matches in the files that were read.</p>
+            <p className="px-3 py-2 text-fg-3">No matches in this commit&apos;s files.</p>
           ) : (
             hits.map((h, i) => (
               <button key={i} onClick={() => onOpen(h.path, h.line ?? undefined)} className="block w-full px-3 py-1.5 text-left hover:bg-raised">

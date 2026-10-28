@@ -1,8 +1,9 @@
 // The MCP tools, shared by the local stdio server (`pnpm mcp`) and the hosted endpoint (`/api/mcp`): a coding
-// agent can get the module map of a public GitHub repo, a line-checked tour answering "how does X work?", a
+// agent can get the module map of a GitHub repo (or, self-hosted, a local folder), a line-checked tour answering "how does X work?", a
 // structured answer (with follow-ups in a thread), or a reviewer's tour of a pull request.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { atlasToMermaid } from "@/lib/export-map";
 import { formatTokens, formatUsd } from "@/lib/format";
 import { blobUrl, parseRepoInput } from "@/lib/ref";
 import type { Atlas, CallRecord, Tour } from "@/lib/schemas";
@@ -22,7 +23,7 @@ const cost = (c: CallRecord, fromCache: boolean) =>
 
 async function load(repo: string) {
   const ref = parseRepoInput(repo);
-  if (!ref) throw new Error(`"${repo}" isn't a GitHub repository. Use owner/repo or a github.com URL.`);
+  if (!ref) throw new Error(`"${repo}" isn't a GitHub repository. Use owner/repo, a github.com URL, or _local/<folder> for a folder on a self-hosted Codetrail.`);
   return prepare(ref);
 }
 
@@ -37,10 +38,15 @@ function mapMarkdown(p: Prepared, atlas: Atlas, fromCache: boolean) {
     `Read ${s.files.read} of ${s.files.total} files (~${formatTokens(s.tokens)} tokens) in one prompt with ${s.modelLabel}.`,
     "",
     "## Modules",
-    ...atlas.nodes.map((n) => `- **${n.label}** (\`${n.id}\`, ${n.kind}): ${n.purpose}\n  ${n.files.map((f) => `\`${f}\``).join(", ")}`),
+    ...atlas.nodes.map((n) => `- **${n.label}** (\`${n.id}\`, ${n.layer ? `${n.layer} layer, ` : ""}${n.kind}): ${n.purpose}\n  ${n.files.map((f) => `\`${f}\``).join(", ")}`),
     "",
     "## Connections",
     ...atlas.edges.map((e) => `- ${e.from} → ${e.to}: ${e.label}${e.verified ? " (confirmed by imports)" : " (inferred)"}`),
+    "",
+    "## Architecture (Mermaid)",
+    "```mermaid",
+    atlasToMermaid(atlas, s),
+    "```",
     "",
     "## Suggested tours (ask codetrail_tour with one of these)",
     ...atlas.tours.map((t) => `- ${t.question}`),
@@ -120,8 +126,8 @@ server.registerTool(
   {
     title: "Map a GitHub repository",
     description:
-      "Reads a whole public GitHub repo with DeepSeek V4.1 Flash 1017 (1M-token context) and returns its modules, their key files, how they connect (marked when confirmed by real imports) and suggested tours. Stored per commit, so asking again is free.",
-    inputSchema: { repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, or a github.com URL") },
+      "Reads a whole GitHub repo (or _local/<folder> on a self-hosted Codetrail) with DeepSeek V4.1 Flash 1017 (1M-token context) and returns its modules, their key files, how they connect (marked when confirmed by real imports) and suggested tours. Stored per commit, so asking again is free.",
+    inputSchema: { repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, a github.com URL, or _local/<folder> when self-hosted") },
   },
   async ({ repo }) => {
     const p = await load(repo);
@@ -135,9 +141,9 @@ server.registerTool(
   {
     title: "Trace how something works",
     description:
-      "Answers a how-does-it-work question about a public GitHub repo as ordered steps through the code, each with a file, a line range checked against the real file, and a short explanation. Maps the repo first if needed.",
+      "Answers a how-does-it-work question about a GitHub repo (or _local/<folder>) as ordered steps through the code, each with a file, a line range checked against the real file, and a short explanation. Maps the repo first if needed.",
     inputSchema: {
-      repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, or a github.com URL"),
+      repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, a github.com URL, or _local/<folder> when self-hosted"),
       question: z.string().min(3).max(300).describe('e.g. "What happens when a request hits the server?"'),
     },
   },
@@ -154,9 +160,9 @@ server.registerTool(
   {
     title: "Ask about a repository",
     description:
-      "Answers a question about a public GitHub repo from a whole-repo read by DeepSeek V4.1 Flash 1017: a short answer with code references checked against the real files, and questions to ask next. Pass the returned thread id to ask a follow-up in context. Answers are stored, so asking again is free.",
+      "Answers a question about a GitHub repo (or _local/<folder>) from a whole-repo read by DeepSeek V4.1 Flash 1017: a short answer with code references checked against the real files, and questions to ask next. Pass the returned thread id to ask a follow-up in context. Answers are stored, so asking again is free.",
     inputSchema: {
-      repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, or a github.com URL"),
+      repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, a github.com URL, or _local/<folder> when self-hosted"),
       question: z.string().min(3).max(300),
       thread: z.string().regex(/^[0-9a-f]{12}$/).optional().describe("A thread id from an earlier codetrail_ask, to follow up in context"),
       thorough: z.boolean().optional().describe("Trace across more files (slower, costs more)"),

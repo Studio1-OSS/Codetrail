@@ -2,7 +2,8 @@
 // in a conversation (`thread`, or `root` to start one); GET replays a stored one.
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { callerOf, errorResponse, repoAt, sse, threadStart } from "@/server/http";
+import { runIdOf } from "@/server/cancel";
+import { callerOf, errorResponse, repoAt, sse, threadStart, refOf } from "@/server/http";
 import { recordReplay } from "@/server/stats";
 import { getAnswer, getStoredAnswer } from "@/server/trail/ask";
 import { askFollowUp, type ThreadStart } from "@/server/trail/threads";
@@ -13,9 +14,9 @@ export const maxDuration = 300;
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const { owner, repo, sha } = repoAt.parse(Object.fromEntries(url.searchParams));
+    const { owner, repo, sha, scope } = repoAt.parse(Object.fromEntries(url.searchParams));
     const id = z.string().regex(/^[0-9a-f]{12}$/).parse(url.searchParams.get("id"));
-    const answer = await getStoredAnswer(await prepare({ owner, repo, ref: sha }), id);
+    const answer = await getStoredAnswer(await prepare(refOf({ owner, repo, sha, scope })), id);
     if (!answer) return NextResponse.json({ error: "No such answer." }, { status: 404 });
     await recordReplay();
     return NextResponse.json({ answer });
@@ -25,10 +26,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: { owner: string; repo: string; sha: string; question: string; mode: "answer" | "thorough" } & ThreadStart;
+  let body: { owner: string; repo: string; sha: string; scope?: string; question: string; mode: "answer" | "thorough" } & ThreadStart;
   let who: string;
+  let runId: string | undefined;
   try {
     const raw = await req.json();
+    runId = runIdOf(raw);
     body = {
       ...repoAt.parse(raw),
       ...threadStart.parse(raw),
@@ -41,7 +44,7 @@ export async function POST(req: Request) {
   }
   return sse(async (send) => {
     let last = 0;
-    const p = await prepare({ owner: body.owner, repo: body.repo, ref: body.sha });
+    const p = await prepare(refOf(body));
     const { atlas } = await getAtlas(p, who);
     const stream = {
       onReasoning: (chars: number) => {
@@ -64,5 +67,5 @@ export async function POST(req: Request) {
       const { answer, fromCache } = await getAnswer(p, atlas, body.question, who, { stream, thorough: body.mode === "thorough" });
       send({ type: "done", answer, fromCache, ledger: await getLedger(p.info) });
     }
-  });
+  }, runId);
 }

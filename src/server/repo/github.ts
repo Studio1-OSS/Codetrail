@@ -22,6 +22,8 @@ export type RepoInfo = {
   sizeKb: number;
   /** Bytes of code per language, from GitHub's linguist. */
   languages: Record<string, number>;
+  /** Set on a read of only some folders (a scope string): it's stored apart from the full read. */
+  scope?: string;
   htmlUrl: string;
   /** Only ever true on a self-hosted instance whose GITHUB_TOKEN can read the repo. */
   private: boolean;
@@ -29,7 +31,7 @@ export type RepoInfo = {
 
 export type RepoFile = { path: string; text: string; lines: number };
 export type RepoImage = { path: string; mime: string; base64: string; bytes: number };
-export type Snapshot = { files: RepoFile[]; images: RepoImage[]; skipped: { path: string; reason: SkipReason | "minified" | "secret" }[] };
+export type Snapshot = { files: RepoFile[]; images: RepoImage[]; skipped: { path: string; reason: SkipReason | "minified" | "secret" | "scope" }[] };
 
 export class RepoError extends Error {
   constructor(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { docsToMarkdown, type Docs } from "./docs-schema";
-import { atlasToMermaid } from "./export-map";
+import { atlasToMermaid, tourToCodeTour } from "./export-map";
 import type { Atlas } from "./schemas";
 
 const atlas = {
@@ -21,11 +21,34 @@ const atlas = {
 describe("atlasToMermaid", () => {
   it("writes a flowchart with safe ids and labels, dotted for inferred links", () => {
     const m = atlasToMermaid(atlas);
-    expect(m.split("\n")[0]).toBe("flowchart LR");
-    expect(m).toContain('m_core["Server #quot;core#quot;"]');
-    expect(m).toContain('m_url_parser["URL  parser"]');
+    expect(m.split("\n")[0]).toBe("flowchart TD");
+    expect(m).toContain('m_core["Server #quot;core#quot;"]:::');
+    expect(m).toContain('m_url_parser["URL  parser"]:::');
     expect(m).toContain('m_core -->|"calls"| m_url_parser');
     expect(m).toContain('m_url_parser -.->|"reads config"| m_core');
+    expect(m).not.toContain("subgraph");
+    expect(m).not.toContain("click");
+  });
+
+  it("groups modules into layers, colours them, and links each to its folder at the commit", () => {
+    const layered = {
+      ...atlas,
+      nodes: [
+        { id: "api", label: "API", kind: "entry", layer: "Entry points", purpose: "p", files: ["src/api/a.ts", "src/api/b.ts"] },
+        { id: "db", label: "Storage", kind: "data", layer: "Data", purpose: "p", files: ["src/db.ts"] },
+        { id: "ci", label: "CI", kind: "tooling", layer: "Build & tests", purpose: "p", files: ["a.yml", "b.yml"] },
+      ],
+      edges: [{ from: "api", to: "db", label: "`save()` writes rows…", verified: true }],
+    } as Atlas;
+    const m = atlasToMermaid(layered, { owner: "o", repo: "r", sha: "abc" });
+    expect(m).toContain('subgraph g0["Entry points"]');
+    expect(m).toContain('subgraph g2["Build & tests"]');
+    expect(m).toContain('m_api -->|"save   writes rows"| m_db');
+    expect(m).toContain('click m_api "https://github.com/o/r/tree/abc/src/api/"');
+    expect(m).toContain('click m_db "https://github.com/o/r/blob/abc/src/db.ts"');
+    expect(m).toContain('click m_ci "https://github.com/o/r/tree/abc/"');
+    expect(m).toContain("classDef m_c_6a7380 fill:#6a738026");
+    expect(atlasToMermaid(layered, { owner: "_local", repo: "r", sha: "abc" })).not.toContain("click");
   });
 });
 
@@ -54,5 +77,30 @@ describe("docsToMarkdown", () => {
     expect(md).toContain("[`src/a.ts`](https://github.com/o/r/blob/abcdef1234567890/src/a.ts)");
     expect(md).toContain("[`src/a.ts:3-9`](https://github.com/o/r/blob/abcdef1234567890/src/a.ts#L3-L9)");
     expect(md).not.toContain("gone.ts");
+  });
+});
+
+describe("tourToCodeTour", () => {
+  const tour = {
+    title: "Request flow",
+    summary: "How a request runs.",
+    steps: [{ node: "core", title: "Listen", file: "src/a.ts", startLine: 10, endLine: 14, anchor: "x", narration: "Starts the server." }],
+  } as Parameters<typeof tourToCodeTour>[0];
+
+  it("selects every line of the range and puts the comment under it, pinned to the commit", () => {
+    const t = tourToCodeTour(tour, { owner: "o", repo: "r", sha: "abcdef1234" });
+    expect(t.ref).toBe("abcdef1234");
+    expect(t.steps[0]).toEqual({
+      title: "Listen",
+      file: "src/a.ts",
+      line: 14,
+      selection: { start: { line: 10, character: 1 }, end: { line: 15, character: 1 } },
+      description: "Starts the server.",
+    });
+  });
+
+  it("pins a PR tour to the PR's head", () => {
+    const pr = { ...tour, pull: { headSha: "feedface99" } } as Parameters<typeof tourToCodeTour>[0];
+    expect(tourToCodeTour(pr, { owner: "o", repo: "r", sha: "abcdef1234" }).ref).toBe("feedface99");
   });
 });

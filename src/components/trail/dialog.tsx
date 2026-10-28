@@ -4,15 +4,15 @@
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-export function Dialog({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
-  const panel = useRef<HTMLDivElement>(null);
+/** For any modal panel: focus moves in on open and back on close, Escape closes, Tab stays inside. */
+export function useModal(panel: React.RefObject<HTMLElement | null>, onClose: () => void, active = true) {
   useEffect(() => {
+    if (!active) return;
     const before = document.activeElement as HTMLElement | null;
     panel.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
       if (e.key !== "Tab" || !panel.current) return;
-      // Keep Tab inside the dialog.
       const items = panel.current.querySelectorAll<HTMLElement>("button, a[href], input, textarea, [tabindex]:not([tabindex='-1'])");
       if (!items.length) return;
       const first = items[0];
@@ -25,7 +25,12 @@ export function Dialog({ title, onClose, children, wide }: { title: string; onCl
       window.removeEventListener("keydown", onKey);
       before?.focus();
     };
-  }, [onClose]);
+  }, [panel, onClose, active]);
+}
+
+export function Dialog({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useModal(panel, onClose);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <button aria-label="Close" tabIndex={-1} className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />

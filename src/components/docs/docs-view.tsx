@@ -5,7 +5,11 @@
 import { Check, CornerUpRight, Download, X } from "lucide-react";
 import { Rich } from "@/components/rich";
 import { docsToMarkdown, type Docs } from "@/lib/docs-schema";
-import { KIND_COLOR, SUPPORT } from "@/lib/palette";
+import { useEffect, useMemo } from "react";
+import { DiagramView } from "@/components/trail/diagram-view";
+import { neighbourhoodSpec, specToMermaid } from "@/lib/diagram";
+import { groupsOf } from "@/lib/architecture";
+import { SUPPORT } from "@/lib/palette";
 import type { Atlas, RepoSummary } from "@/lib/schemas";
 
 type Props = {
@@ -18,27 +22,48 @@ type Props = {
   onClose: () => void;
 };
 
-function download(docs: Docs, summary: RepoSummary) {
-  const blob = new Blob([docsToMarkdown(docs, summary)], { type: "text/markdown" });
+function save(text: string, type: string, name: string) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${summary.repo}-docs.md`;
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name;
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** All the docs, or one page, as Markdown with each page's diagram; or all of it as JSON. */
+function download(docs: Docs, atlas: Atlas, summary: RepoSummary, what: "all" | "json" | string) {
+  if (what === "json") return save(JSON.stringify({ repo: `${summary.owner}/${summary.repo}`, commit: summary.sha, pages: docs.pages }, null, 2), "application/json", `${summary.repo}-docs.json`);
+  const pages = what === "all" ? docs : { ...docs, pages: docs.pages.filter((p) => p.node === what) };
+  const diagrams = Object.fromEntries(pages.pages.map((p) => [p.node, specToMermaid(neighbourhoodSpec(atlas, summary, p.node))]));
+  save(docsToMarkdown(pages, summary, diagrams), "text/markdown", what === "all" ? `${summary.repo}-docs.md` : `${summary.repo}-${what}.md`);
 }
 
 export function DocsView({ docs, atlas, summary, page, onPage, onOpen, onClose }: Props) {
   const p = docs.pages.find((x) => x.node === page) ?? docs.pages[0];
-  const kind = (id: string) => atlas.nodes.find((n) => n.id === id)?.kind ?? "";
+  const colorOf = groupsOf(atlas.nodes).color;
+  const node = p?.node;
+  const spec = useMemo(() => (node ? neighbourhoodSpec(atlas, summary, node) : null), [atlas, summary, node]);
+  // Esc closes the docs, unless something on top of them (a dialog, a menu) is taking it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector("[role=dialog]") && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   if (!p) return null;
   return (
     <article aria-labelledby="doc-title">
       <div className="flex items-center justify-between gap-2">
         <p className="font-mono text-[10.5px] tracking-[0.15em] text-fg-3 uppercase">Docs · {docs.pages.length} pages</p>
         <span className="flex items-center gap-1">
-          <button onClick={() => download(docs, summary)} className="inline-flex items-center gap-1.5 rounded-[8px] border border-line px-2 py-1 font-mono text-[10.5px] text-fg-2 hover:border-outline hover:text-fg">
-            <Download className="size-3" /> Markdown
-          </button>
+          {[
+            { what: p.node, label: "This page", title: "This page as Markdown, with its diagram" },
+            { what: "all", label: "All · .md", title: "Every page as one Markdown file, with diagrams" },
+            { what: "json", label: ".json", title: "Every page as JSON" },
+          ].map((x) => (
+            <button key={x.label} onClick={() => download(docs, atlas, summary, x.what)} title={x.title} className="inline-flex items-center gap-1.5 rounded-[8px] border border-line px-2 py-1 font-mono text-[10.5px] text-fg-2 hover:border-outline hover:text-fg">
+              <Download className="size-3" /> {x.label}
+            </button>
+          ))}
           <button onClick={onClose} aria-label="Close the docs" className="rounded p-1 text-fg-3 hover:text-fg">
             <X className="size-3.5" />
           </button>
@@ -52,7 +77,7 @@ export function DocsView({ docs, atlas, summary, page, onPage, onOpen, onClose }
             aria-current={x.node === p.node ? "page" : undefined}
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] ${x.node === p.node ? "border-trail/60 bg-trail-soft text-fg" : "border-line text-fg-2 hover:border-outline"}`}
           >
-            <span className="size-1.5 rounded-full" style={{ background: KIND_COLOR[kind(x.node)] ?? SUPPORT }} />
+            <span className="size-1.5 rounded-full" style={{ background: colorOf.get(x.node) ?? SUPPORT }} />
             {x.title}
           </button>
         ))}
@@ -64,6 +89,25 @@ export function DocsView({ docs, atlas, summary, page, onPage, onOpen, onClose }
       <p className="mt-2 text-[14.5px] leading-relaxed text-fg-2">
         <Rich text={p.overview} />
       </p>
+      {spec && spec.boxes.length > 1 && (
+        <figure className="mt-4">
+          <div className="relative h-[300px] overflow-hidden rounded-card border border-line dot-grid">
+            <DiagramView
+              key={p.node}
+              compact
+              spec={spec}
+              ariaLabel={`${p.title}: its files, their imports, and the modules it links to. Enter on a file opens it; on a module, its page.`}
+              selected={null}
+              onSelect={(id) => {
+                if (!id) return;
+                if (id.includes("::")) onOpen(id.slice(id.indexOf("::") + 2));
+                else if (id !== p.node && docs.pages.some((x) => x.node === id)) onPage(id);
+              }}
+            />
+          </div>
+          <figcaption className="mt-1.5 font-mono text-[10.5px] text-fg-3">Its files and their imports, and the modules it links to. Click a file to open it, a module to go to its page.</figcaption>
+        </figure>
+      )}
       {p.sections.map((s) => (
         <section key={s.heading} className="mt-4">
           <h3 className="font-medium text-fg">{s.heading}</h3>

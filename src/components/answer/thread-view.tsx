@@ -4,7 +4,8 @@
 // to ask your own. Each follow-up goes after the cached repo with a recap of the conversation.
 import { CornerDownRight, MessagesSquare } from "lucide-react";
 import { useState } from "react";
-import { AskBox } from "@/components/trail/ask-box";
+import { AskBox, costOf } from "@/components/trail/ask-box";
+import { formatUsd } from "@/lib/format";
 import { pickMode, type AskMode } from "@/lib/match";
 import type { RepoSummary } from "@/lib/schemas";
 import type { Thread, ThreadTurn } from "@/lib/thread";
@@ -19,7 +20,7 @@ type Props = {
   /** Start with the box open (answers); tours keep it folded so the code stays in view. */
   open?: boolean;
   onTurn: (turn: ThreadTurn) => void;
-  onAsk: (question: string, mode: AskMode) => void;
+  onAsk: (question: string, mode: AskMode) => Promise<boolean> | void;
 };
 
 export function ThreadView({ summary, thread, activeRef, followUps, busy, open = false, onTurn, onAsk }: Props) {
@@ -36,10 +37,10 @@ export function ThreadView({ summary, thread, activeRef, followUps, busy, open =
               key={t.refId}
               onClick={() => onTurn(t)}
               aria-current={t.refId === activeRef ? "step" : undefined}
-              title={t.question}
-              className={`rounded-md border px-1.5 py-0.5 font-mono text-[10.5px] ${t.refId === activeRef ? "border-trail text-trail" : "border-line text-fg-3 hover:text-fg"}`}
+              title={`${t.kind === "tour" ? "Tour" : "Answer"}: ${t.question}`}
+              className={`max-w-[220px] truncate rounded-md border px-1.5 py-0.5 text-left font-mono text-[10.5px] ${t.refId === activeRef ? "border-trail text-trail" : "border-line text-fg-3 hover:text-fg"}`}
             >
-              {i + 1} · {t.kind}
+              {i + 1}. {t.question}
             </button>
           ))}
         </nav>
@@ -51,10 +52,20 @@ export function ThreadView({ summary, thread, activeRef, followUps, busy, open =
               <button
                 onClick={() => onAsk(q, pickMode(q))}
                 disabled={busy}
+                title={(() => {
+                  const c = costOf(summary, pickMode(q), true);
+                  return c ? `Asks this now: ≈ ${formatUsd(c.cached)} if the repo is cached, up to ${formatUsd(c.cold)}` : "Asks this now";
+                })()}
                 className="inline-flex items-start gap-1 rounded-[9px] border border-line px-2 py-1 text-left text-[12px] leading-snug text-fg-2 hover:border-trail/60 hover:text-fg disabled:opacity-40"
               >
                 <CornerDownRight className="mt-0.5 size-3 shrink-0 text-trail" aria-hidden />
-                {q}
+                <span>
+                  {q}
+                  {(() => {
+                    const c = costOf(summary, pickMode(q), true);
+                    return c ? <span className="ml-1.5 font-mono text-[10px] text-fg-3">≈ {formatUsd(c.cached)}</span> : null;
+                  })()}
+                </span>
               </button>
             </li>
           ))}

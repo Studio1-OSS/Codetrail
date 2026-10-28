@@ -11,10 +11,14 @@ import { localInfo, readLocal } from "@/server/repo/local";
 import { buildImportGraph, summarizeGraph, type ImportGraph } from "@/server/repo/graph";
 import { estimateTokens, packRepo, type Pack } from "@/server/repo/pack";
 import { LOCAL_OWNER, type RepoRef } from "@/lib/ref";
-import { appendCall, fileFromStore, getCalls, getJSON, loadSnapshot, putJSON, saveSnapshot } from "@/server/store";
+import { appendCall, fileFromStore, getCalls, getJSON, keysLike, loadSnapshot, putJSON, saveSnapshot } from "@/server/store";
 import { recordCall, spentToday } from "@/server/stats";
 import { AuthRequiredError, takeQuota, type QuotaKind } from "@/server/quota";
 import { savedBy } from "@/lib/cache";
+import { inScope, parseScope, scopeHash, scopeString } from "@/lib/scope";
+import { shared } from "@/server/inflight";
+
+export { shared };
 import { groundSteps, nodeForFile, resolvePath } from "./ground";
 import { ATLAS_TASK, repoPrefix, tourTask } from "./prompts";
 
@@ -29,7 +33,11 @@ export type Prepared = {
   summary: RepoSummary;
 };
 
-const base = (info: Pick<RepoInfo, "owner" | "repo" | "sha">) => `repos/${info.owner.toLowerCase()}/${info.repo.toLowerCase()}/${info.sha}`;
+/** Where a read is stored. A read of only some folders gets its own key next to the full read's. */
+const base = (info: Pick<RepoInfo, "owner" | "repo" | "sha"> & { scope?: string }) => {
+  const scope = parseScope(info.scope);
+  return `repos/${info.owner.toLowerCase()}/${info.repo.toLowerCase()}/${info.sha}${scope ? `~${scopeHash(scope)}` : ""}`;
+};
 const questionId = (q: string) => createHash("sha1").update(q.trim().toLowerCase().replace(/\s+/g, " ")).digest("hex").slice(0, 12);
 
 // --- Small in-memory caches (per server instance) ---------------------------------------------------
@@ -60,7 +68,9 @@ export function repoInfo(ref: RepoRef): Promise<RepoInfo> {
 
 /** Downloads (or loads) the commit, builds the import graph and packs it. No AI. */
 export function prepare(ref: RepoRef): Promise<Prepared> {
-  return repoInfo(ref).then((info) => {
+  const scope = scopeString(parseScope(ref.scope));
+  return repoInfo(ref).then((raw) => {
+    const info: RepoInfo = scope ? { ...raw, scope } : raw;
     const key = base(info);
     let p = prepared.get(key);
     if (!p) {
@@ -73,14 +83,27 @@ export function prepare(ref: RepoRef): Promise<Prepared> {
 }
 
 async function build(info: RepoInfo): Promise<Prepared> {
-  let snapshot = await loadSnapshot(base(info));
+  // The commit's files are stored once, under the full read; a scoped read filters them.
+  const full: RepoInfo = { ...info, scope: undefined };
+  let snapshot = await loadSnapshot(base(full));
   if (!snapshot) {
     snapshot = info.owner === LOCAL_OWNER ? await readLocal(info.repo) : await downloadSnapshot(info, env.GITHUB_TOKEN);
-    await saveSnapshot(base(info), snapshot);
+    await saveSnapshot(base(full), snapshot);
   }
-  if (!(await getJSON<RepoInfo>(`${base(info)}/info.json`))) {
+  if (!(await getJSON<RepoInfo>(`${base(full)}/info.json`))) {
     // Keep the branch name for display even when this commit was first opened by its hash.
-    await putJSON(`${base(info)}/info.json`, /^[0-9a-f]{40}$/i.test(info.ref) ? { ...info, ref: info.defaultBranch } : info);
+    await putJSON(`${base(full)}/info.json`, /^[0-9a-f]{40}$/i.test(full.ref) ? { ...full, ref: full.defaultBranch } : full);
+  }
+  const scope = parseScope(info.scope);
+  if (scope) {
+    // The scoped read's own facts, so lists can link back to it with its folders.
+    if (!(await getJSON<RepoInfo>(`${base(info)}/info.json`))) await putJSON(`${base(info)}/info.json`, { ...full, ref: /^[0-9a-f]{40}$/i.test(full.ref) ? full.defaultBranch : full.ref, scope: info.scope });
+    const out = snapshot.files.filter((f) => !inScope(f.path, scope));
+    snapshot = {
+      files: snapshot.files.filter((f) => inScope(f.path, scope)),
+      images: snapshot.images.filter((i) => inScope(i.path, scope)),
+      skipped: [...out.map((f) => ({ path: f.path, reason: "scope" as const })), ...snapshot.skipped.filter((s) => inScope(s.path, scope))],
+    };
   }
   const graph = buildImportGraph(snapshot.files);
   // Room for the system prompt, the header and up to six images.
@@ -95,6 +118,7 @@ async function build(info: RepoInfo): Promise<Prepared> {
   const summary: RepoSummary = {
     owner: info.owner,
     repo: info.repo,
+    ...(info.scope ? { scope: info.scope } : {}),
     description: info.description,
     stars: info.stars,
     ref: info.ref,
@@ -126,12 +150,13 @@ async function build(info: RepoInfo): Promise<Prepared> {
       ...pack.compressed.map((f) => [f.path, f.lines, "signatures"] as [string, number, "signatures"]),
       ...pack.overBudget.map((f) => [f.path, f.lines, "left out"] as [string, number, "left out"]),
     ].slice(0, 3_000),
-    imports: (() => {
+    ...(() => {
       const index = new Map(pack.included.slice(0, 2_000).map((f, i) => [f.path, i]));
-      return graph.edges
-        .map(([a, b]) => [index.get(a), index.get(b)] as const)
-        .filter((e): e is [number, number] => e[0] !== undefined && e[1] !== undefined)
+      const kept = graph.edges
+        .map(([a, b]) => ({ pair: [index.get(a), index.get(b)] as const, line: graph.lines.get(`${a}\u0000${b}`) ?? null }))
+        .filter((e): e is { pair: [number, number]; line: number | null } => e.pair[0] !== undefined && e.pair[1] !== undefined)
         .slice(0, 4_000);
+      return { imports: kept.map((e) => e.pair), importLines: kept.map((e) => e.line) };
     })(),
     overBudget: pack.overBudget.slice(0, 300).map((f) => f.path),
     skippedSample: snapshot.skipped.slice(0, 300).map((s) => ({ path: s.path, reason: s.reason })),
@@ -162,17 +187,6 @@ export function withActuals(summary: RepoSummary, ledger: CallRecord[]): RepoSum
 }
 
 // --- One model call per piece of work -------------------------------------------------------------------
-const inflight = new Map<string, Promise<unknown>>();
-
-/** Shares a running call: a second tab (or visitor) asking the same new thing waits for it instead of paying again. */
-export function shared<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const running = inflight.get(key) as Promise<T> | undefined;
-  if (running) return running;
-  const call = run().finally(() => inflight.delete(key));
-  inflight.set(key, call);
-  return call;
-}
-
 // --- Spend and rate limits -------------------------------------------------------------------------
 const hits = new Map<string, number[]>();
 
@@ -249,6 +263,22 @@ export const getStoredAtlas = (info: RepoInfo) => getJSON<Atlas>(`${base(info)}/
 
 export const getTourIndex = (info: RepoInfo) => getJSON<TourIndexEntry[]>(`${base(info)}/tours.json`).then((t) => t ?? []);
 export const getStoredTour = (info: RepoInfo, id: string) => getJSON<Tour>(`${base(info)}/tours/${id.replace(/[^\w-]/g, "")}.json`);
+
+/** One tour step's place in the code, for the code panel's markers. */
+export type TourMark = { tourId: string; tourTitle: string; step: number; title: string; file: string; start: number; end: number };
+const marksCache = new Map<string, { key: string; marks: TourMark[] }>();
+
+/** Where every listed tour's steps sit (pull-request and conversation tours aren't listed, so they're left out). */
+export async function tourMarks(info: Pick<RepoInfo, "owner" | "repo" | "sha" | "scope">): Promise<TourMark[]> {
+  const index = await getTourIndex(info as RepoInfo);
+  const key = `${index.length}:${Math.max(0, ...index.map((t) => t.at))}`;
+  const hit = marksCache.get(base(info));
+  if (hit?.key === key) return hit.marks;
+  const tours = await Promise.all(index.map((t) => getStoredTour(info as RepoInfo, t.id)));
+  const marks = tours.flatMap((t) => (t ? t.steps.map((s, i) => ({ tourId: t.id, tourTitle: t.title, step: i, title: s.title, file: s.file, start: s.startLine, end: s.endLine })) : []));
+  remember(marksCache, base(info), { key, marks }, 50);
+  return marks;
+}
 
 // --- The map ----------------------------------------------------------------------------------------
 export async function getAtlas(p: Prepared, who: string, stream?: StreamHooks): Promise<{ atlas: Atlas; fromCache: boolean }> {
@@ -397,15 +427,15 @@ async function saveTour(p: Prepared, atlas: Atlas, question: string, answer: Tou
 }
 
 // --- Recently traced --------------------------------------------------------------------------------
-type RecentRepo = { owner: string; repo: string; description: string | null; stars: number; at: number; sha?: string; private?: boolean };
+type RecentRepo = { owner: string; repo: string; description: string | null; stars: number; at: number; sha?: string; private?: boolean; scope?: string };
 
 export const getRecent = () => getJSON<RecentRepo[]>("recent.json").then((r) => r ?? []);
 
 async function addRecent(info: RepoInfo) {
   const list = await getRecent();
   const next = [
-    { owner: info.owner, repo: info.repo, description: info.description, stars: info.stars, at: Date.now(), sha: info.sha, private: info.private },
-    ...list.filter((r) => `${r.owner}/${r.repo}`.toLowerCase() !== `${info.owner}/${info.repo}`.toLowerCase()),
+    { owner: info.owner, repo: info.repo, description: info.description, stars: info.stars, at: Date.now(), sha: info.sha, private: info.private, ...(info.scope ? { scope: info.scope } : {}) },
+    ...list.filter((r) => `${r.owner}/${r.repo}~${r.scope ?? ""}`.toLowerCase() !== `${info.owner}/${info.repo}~${info.scope ?? ""}`.toLowerCase()),
   ].slice(0, 24);
   await putJSON("recent.json", next);
 }
@@ -472,7 +502,7 @@ export async function getRepoSpend(): Promise<RepoSpend[]> {
   const out: RepoSpend[] = [];
   for (const r of await getRecent()) {
     if (!r.sha) continue;
-    const info = { owner: r.owner, repo: r.repo, sha: r.sha };
+    const info = { owner: r.owner, repo: r.repo, sha: r.sha, scope: r.scope };
     const [ledger, tours] = await Promise.all([getCalls(base(info)), getJSON<TourIndexEntry[]>(`${base(info)}/tours.json`)]);
     const l = ledger ?? [];
     const input = l.reduce((a, c) => a + c.usage.input, 0);
@@ -577,7 +607,7 @@ const aheadCache = new Map<string, Promise<number | null>>();
  * behind it is, instead of asking everyone to pay for a new read. Returns the ref to open and what's newer.
  */
 export async function freshestRead(ref: RepoRef): Promise<{ ref: RepoRef; newer: Newer | null }> {
-  if (ref.ref || ref.owner === LOCAL_OWNER) return { ref, newer: null };
+  if (ref.ref || ref.owner === LOCAL_OWNER || ref.scope) return { ref, newer: null };
   const [head, readSha] = await Promise.all([repoInfo(ref), latestReadSha(ref.owner, ref.repo)]);
   if (!readSha || readSha === head.sha || (await getStoredAtlas(head))) return { ref, newer: null };
   const key = `${head.owner}/${head.repo}:${readSha}...${head.sha}`;
@@ -589,9 +619,27 @@ export async function freshestRead(ref: RepoRef): Promise<{ ref: RepoRef; newer:
   return { ref: { ...ref, ref: readSha }, newer: { sha: head.sha, branch: head.ref, ahead: await ahead } };
 }
 
+/** One read on this instance, for the Browse page and llms.txt. */
+export type ReadEntry = { owner: string; repo: string; sha: string; scope?: string; description: string | null; stars: number; private: boolean; modules: number; tours: number; docs: boolean; at: number };
+
+/** Every read stored on this instance (every commit with a map), newest first. Private reads are marked. */
+export async function listReads(): Promise<ReadEntry[]> {
+  const maps = await keysLike("repos/%/atlas.json");
+  const out = await Promise.all(
+    maps.map(async ({ key, at }) => {
+      const sha = key.split("/")[3].split("~")[0];
+      const commit = key.slice(0, -"/atlas.json".length);
+      const [info, atlas, tours, docs] = await Promise.all([getJSON<RepoInfo>(`${commit}/info.json`), getJSON<Atlas>(`${commit}/atlas.json`), getJSON<TourIndexEntry[]>(`${commit}/tours.json`), keysLike(`${commit}/docs.json`)]);
+      if (!info || !atlas) return null;
+      return { owner: info.owner, repo: info.repo, sha, ...(info.scope ? { scope: info.scope } : {}), description: info.description, stars: info.stars, private: !!info.private || info.owner === LOCAL_OWNER, modules: atlas.nodes.length, tours: tours?.length ?? 0, docs: docs.length > 0, at };
+    }),
+  );
+  return out.filter((r): r is ReadEntry => !!r).sort((a, b) => b.at - a.at);
+}
+
 /** The commit of a repo's most recent read, so a PR can be toured on top of it without reading again. */
 export const latestReadSha = async (owner: string, repo: string) =>
-  (await getRecent()).find((r) => `${r.owner}/${r.repo}`.toLowerCase() === `${owner}/${repo}`.toLowerCase())?.sha;
+  (await getRecent()).find((r) => !r.scope && `${r.owner}/${r.repo}`.toLowerCase() === `${owner}/${repo}`.toLowerCase())?.sha;
 
 /** What's stored about a repo's latest read, for search engines and link previews (no GitHub call). */
 export async function storedOverview(owner: string, repo: string): Promise<{ summary: string; modules: string[]; tours: string[] } | null> {

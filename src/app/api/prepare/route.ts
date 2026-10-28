@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseRepoInput } from "@/lib/ref";
 import type { PullView } from "@/lib/schemas";
-import { errorResponse } from "@/server/http";
+import { errorResponse, repoAt } from "@/server/http";
 import { getAnswerIndex } from "@/server/trail/ask";
 import { getStoredDocs } from "@/server/trail/docs";
 import { getPullIndex, getPullView } from "@/server/trail/pulls";
@@ -15,8 +15,11 @@ export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
-    const { input, pull } = z.object({ input: z.string().min(1).max(300), pull: z.number().int().positive().optional() }).parse(await req.json());
+    const { input, pull, scope } = z
+      .object({ input: z.string().min(1).max(300), pull: z.number().int().positive().optional(), scope: repoAt.shape.scope })
+      .parse(await req.json());
     let ref = parseRepoInput(input);
+    if (ref && scope) ref = { ...ref, scope };
     if (!ref) return NextResponse.json({ error: "That doesn't look like a GitHub repository. Try owner/repo or a github.com link." }, { status: 400 });
     // A PR is toured on top of the commit already read, so opening one never forces a new read.
     let newer: Newer | null = null;

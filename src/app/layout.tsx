@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   applicationName: "Codetrail",
   keywords: ["code tour", "codebase walkthrough", "architecture diagram", "AI code docs", "GitHub repo explorer", "DeepSeek", "DeepWiki alternative", "GitDiagram alternative", "CodeTour", "MCP"],
   alternates: { canonical: "/" },
-  openGraph: { type: "website", siteName: "Codetrail", url: "/", title: "Codetrail: diagram, wiki, code tour and Q&A, in one link", description },
-  twitter: { card: "summary_large_image", title: "Codetrail: diagram, wiki, code tour and Q&A, in one link", description },
+  openGraph: { type: "website", siteName: "Codetrail", url: "/", title: "Codetrail: diagram, docs, code tour and Q&A, in one link", description },
+  twitter: { card: "summary_large_image", title: "Codetrail: diagram, docs, code tour and Q&A, in one link", description },
 };
 
 export const viewport: Viewport = {

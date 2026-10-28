@@ -7,6 +7,8 @@ import type { RepoFile } from "./github";
 export type ImportGraph = {
   /** [from, to] file paths, both inside the repo. */
   edges: [string, string][];
+  /** The line of the first import behind each edge, keyed "from\0to": the evidence for a link on the map. */
+  lines: Map<string, number>;
   /** Files a program or a request starts from. */
   entries: string[];
 };
@@ -27,15 +29,12 @@ function parseJson<T>(text: string | undefined): T | null {
   }
 }
 
-export function buildImportGraph(files: RepoFile[]): ImportGraph {
-  const byPath = new Map(files.map((f) => [f.path, f]));
-  const has = (p: string) => byPath.has(p);
-  const edges = new Set<string>();
-  const add = (from: string, to: string | null | undefined) => {
-    if (to && to !== from && has(to)) edges.add(`${from}\u0000${to}`);
-  };
-
-  // --- JavaScript / TypeScript -------------------------------------------------------------------
+/**
+ * How a JS/TS import resolves to a file in the repo: relative paths (with .js→.ts and index files), tsconfig
+ * "paths" aliases, "@/" and "~/", and workspace packages by name. Null for anything outside the repo.
+ */
+export function jsResolver(files: RepoFile[]) {
+  const has = (p: string) => byPathOf(files).has(p);
   const resolveJsFile = (p: string): string | null => {
     const clean = path.normalize(p).replace(/^\.\//, "");
     if (has(clean) && !clean.endsWith("/")) return clean;
@@ -88,6 +87,41 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
     }
     return null;
   };
+  return { resolveJs, resolveJsFile };
+}
+
+const pathSets = new WeakMap<RepoFile[], Set<string>>();
+const byPathOf = (files: RepoFile[]) => {
+  let set = pathSets.get(files);
+  if (!set) pathSets.set(files, (set = new Set(files.map((f) => f.path))));
+  return set;
+};
+
+export function buildImportGraph(files: RepoFile[]): ImportGraph {
+  const byPath = new Map(files.map((f) => [f.path, f]));
+  const has = (p: string) => byPath.has(p);
+  const edges = new Set<string>();
+  const lines = new Map<string, number>();
+  // The file being read and where its lines start, so a match's offset becomes a line number.
+  let starts: number[] = [];
+  const lineAt = (offset: number) => {
+    let lo = 0, hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
+  const add = (from: string, to: string | null | undefined, offset?: number) => {
+    if (!to || to === from || !has(to)) return;
+    const key = `${from}\u0000${to}`;
+    edges.add(key);
+    if (offset !== undefined && !lines.has(key)) lines.set(key, lineAt(offset));
+  };
+
+  // --- JavaScript / TypeScript -------------------------------------------------------------------
+  const { resolveJs, resolveJsFile } = jsResolver(files);
   const JS_IMPORT = /(?:import|export)\s[^'"`;]*?from\s*['"]([^'"]+)['"]|import\s*['"]([^'"]+)['"]|(?:require|import)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
   // --- Python ------------------------------------------------------------------------------------
@@ -136,16 +170,18 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
 
   for (const f of files) {
     const p = f.path;
+    starts = [0];
+    for (let i = f.text.indexOf("\n"); i >= 0; i = f.text.indexOf("\n", i + 1)) starts.push(i + 1);
     if (isJs(p)) {
-      for (const m of f.text.matchAll(JS_IMPORT)) add(p, resolveJs(p, m[1] ?? m[2] ?? m[3]));
+      for (const m of f.text.matchAll(JS_IMPORT)) add(p, resolveJs(p, m[1] ?? m[2] ?? m[3]), m.index);
     } else if (p.endsWith(".py")) {
       // "from x import a, b" on one line, or a parenthesised list over several.
       for (const m of f.text.matchAll(/^[ \t]*from[ \t]+(\.*[\w.]*)[ \t]+import[ \t]+(\([^)]*\)|[^\n#]+)/gm)) {
         const names = m[2].replace(/[()]/g, "").split(",").map((s) => s.trim().split(/\s+/)[0]).filter(Boolean);
-        for (const hit of resolvePy(p, m[1], names)) add(p, hit);
+        for (const hit of resolvePy(p, m[1], names)) add(p, hit, m.index);
       }
       for (const m of f.text.matchAll(/^[ \t]*import[ \t]+([\w.]+(?:[ \t]*,[ \t]*[\w.]+)*)/gm)) {
-        for (const mod of m[1].split(",")) for (const hit of resolvePy(p, mod.trim(), [])) add(p, hit);
+        for (const mod of m[1].split(",")) for (const hit of resolvePy(p, mod.trim(), [])) add(p, hit, m.index);
       }
     } else if (p.endsWith(".go")) {
       const block = f.text.match(/import\s*\(([\s\S]*?)\)/)?.[1] ?? "";
@@ -155,7 +191,7 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
         for (const mod of goModules) {
           if (spec === mod.module || spec.startsWith(`${mod.module}/`)) {
             const dir = path.join(mod.dir, spec.slice(mod.module.length).replace(/^\//, "")).replace(/^\.$/, "");
-            for (const target of goDirs.get(dir) ?? []) add(p, target);
+            for (const target of goDirs.get(dir) ?? []) add(p, target, f.text.indexOf(`"${spec}"`));
           }
         }
       }
@@ -163,7 +199,7 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
       const dir = path.dirname(p);
       const own = /(^|\/)(mod|lib|main)\.rs$/.test(p) ? dir : p.replace(/\.rs$/, "");
       for (const m of f.text.matchAll(/^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;/gm)) {
-        add(p, has(path.join(own, `${m[1]}.rs`)) ? path.join(own, `${m[1]}.rs`) : path.join(own, m[1], "mod.rs"));
+        add(p, has(path.join(own, `${m[1]}.rs`)) ? path.join(own, `${m[1]}.rs`) : path.join(own, m[1], "mod.rs"), m.index);
       }
       const crateRoot = (() => {
         for (let d = dir; d && d !== "."; d = path.dirname(d)) if (has(`${d}/lib.rs`) || has(`${d}/main.rs`)) return d;
@@ -175,7 +211,7 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
           const base = path.join(crateRoot, ...parts.slice(0, n));
           const hit = has(`${base}.rs`) ? `${base}.rs` : has(`${base}/mod.rs`) ? `${base}/mod.rs` : null;
           if (hit) {
-            add(p, hit);
+            add(p, hit, m.index);
             break;
           }
         }
@@ -183,20 +219,21 @@ export function buildImportGraph(files: RepoFile[]): ImportGraph {
     } else if (/\.(java|kt|kts|scala)$/.test(p)) {
       for (const m of f.text.matchAll(/^\s*import\s+(?:static\s+)?([\w.]+)\s*;?/gm)) {
         const rel = m[1].replace(/\.\*$/, "").replace(/\./g, "/");
-        add(p, bySuffix(`${rel}.java`) ?? bySuffix(`${rel}.kt`) ?? bySuffix(`${rel}.scala`));
+        add(p, bySuffix(`${rel}.java`) ?? bySuffix(`${rel}.kt`) ?? bySuffix(`${rel}.scala`), m.index);
       }
     } else if (/\.(c|cc|cpp|cxx|h|hh|hpp|m|mm)$/.test(p)) {
       for (const m of f.text.matchAll(/^\s*#\s*(?:include|import)\s+"([^"]+)"/gm)) {
         const local = path.join(path.dirname(p), m[1]);
-        add(p, has(local) ? local : bySuffix(m[1]));
+        add(p, has(local) ? local : bySuffix(m[1]), m.index);
       }
     } else if (p.endsWith(".rb")) {
-      for (const m of f.text.matchAll(/require_relative\s+['"]([^'"]+)['"]/g)) add(p, `${path.join(path.dirname(p), m[1])}.rb`.replace(/\.rb\.rb$/, ".rb"));
+      for (const m of f.text.matchAll(/require_relative\s+['"]([^'"]+)['"]/g)) add(p, `${path.join(path.dirname(p), m[1])}.rb`.replace(/\.rb\.rb$/, ".rb"), m.index);
     }
   }
 
   return {
     edges: [...edges].map((e) => e.split("\u0000") as [string, string]),
+    lines,
     entries: findEntries(files, has, resolveJsFile),
   };
 }

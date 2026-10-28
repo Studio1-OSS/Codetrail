@@ -8,8 +8,8 @@ import { today } from "@/server/stats";
 export type QuotaKind = "reads" | "asks";
 
 export class AuthRequiredError extends Error {
-  constructor() {
-    super("Sign in with GitHub to read new repos and ask questions. Stored repos and tours stay free without signing in.");
+  constructor(message = "Sign in with GitHub to read new repos and ask questions. Stored repos and tours stay free without signing in.") {
+    super(message);
     this.name = "AuthRequiredError";
   }
 }

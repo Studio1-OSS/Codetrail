@@ -1,18 +1,15 @@
 // Ask answers with generative UI: DeepSeek writes OpenUI Lang from our block library (tables, file lists,
 // sequences, code references), on the same cached repo prefix as tours. Every code reference and file path
 // is then checked against the real code, and the answer is stored per commit for free replays.
-import { createLibrary, createParser, defineComponent, type ElementNode } from "@openuidev/lang-core";
-import { ANSWER_EXAMPLE, ANSWER_ROOT, ANSWER_RULES, answerDescription, answerProps, blockSpecs, cleanProgram, refKey, THOROUGH_RULES, type StoredAnswer } from "@/lib/answer-schema";
+import type { ElementNode } from "@openuidev/lang-core";
+import { plainLibrary as serverLibrary, parseAnswer } from "@/lib/answer-lib";
+import { ANSWER_EXAMPLE, ANSWER_RULES, cleanProgram, refKey, THOROUGH_RULES, type StoredAnswer } from "@/lib/answer-schema";
 import type { Atlas } from "@/lib/schemas";
 import { chatText, type StreamHooks } from "@/server/ai/nebius";
 import { getJSON, putJSON } from "@/server/store";
 import { groundSteps, resolvePath } from "./ground";
 import { answerTitle } from "@/lib/thread";
 import { answerBase, checkLimitsFor, questionIdOf, shared, trackedCall, type Followed, type Prepared } from "./service";
-
-const blocks = Object.entries(blockSpecs).map(([name, spec]) => defineComponent({ name, description: spec.description, props: spec.props, component: null }));
-const root = defineComponent({ name: ANSWER_ROOT, description: answerDescription, props: answerProps(blocks.map((b) => b.ref)), component: null });
-const serverLibrary = createLibrary({ components: [root, ...blocks], root: ANSWER_ROOT });
 
 const PROMPT = serverLibrary.prompt({
   preamble: "Answer the developer's question about the repository above with a short structured answer.",
@@ -27,7 +24,7 @@ export const getStoredAnswer = (p: Prepared, id: string) => getJSON<StoredAnswer
 
 /** Walks the parsed answer and checks every code reference and file path against the repo. */
 function checkAnswer(text: string, p: Pick<Prepared, "files">, atlas: Atlas): StoredAnswer["checks"] {
-  const parsed = createParser(serverLibrary.toJSONSchema(), ANSWER_ROOT).parse(text);
+  const parsed = parseAnswer(text);
   const refs: StoredAnswer["checks"]["refs"] = {};
   const files: StoredAnswer["checks"]["files"] = {};
   const nodes = atlas.nodes.map((n) => ({ id: n.id, files: n.files }));

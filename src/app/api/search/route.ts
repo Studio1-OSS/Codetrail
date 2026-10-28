@@ -1,7 +1,7 @@
 // Search the files that were read, by path and by content, straight from the stored snapshot (no GitHub calls).
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { errorResponse, repoAt } from "@/server/http";
+import { errorResponse, repoAt, refOf } from "@/server/http";
 import { searchFiles } from "@/server/store";
 import { commitKey, prepare } from "@/server/trail/service";
 
@@ -10,9 +10,9 @@ export type SearchHit = { path: string; line: number | null; text: string };
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const { owner, repo, sha } = repoAt.parse(Object.fromEntries(url.searchParams));
+    const { owner, repo, sha, scope } = repoAt.parse(Object.fromEntries(url.searchParams));
     const q = z.string().trim().min(2).max(100).parse(url.searchParams.get("q"));
-    const p = await prepare({ owner, repo, ref: sha });
+    const p = await prepare(refOf({ owner, repo, sha, scope }));
     const needle = q.toLowerCase();
     const hits: SearchHit[] = [];
     // Path matches first, then matching lines (at most 3 per file), 60 results in all. The full-text index

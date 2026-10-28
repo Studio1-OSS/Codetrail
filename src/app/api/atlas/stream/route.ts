@@ -2,7 +2,8 @@
 // writes them, then the final checked map. What's streamed is for display only; the checks run on the
 // finished answer exactly as in /api/atlas.
 import { Allow, parse } from "partial-json";
-import { callerOf, errorResponse, repoAt, sse } from "@/server/http";
+import { runIdOf } from "@/server/cancel";
+import { callerOf, errorResponse, repoAt, sse, refOf } from "@/server/http";
 import { getAtlas, getLedger, getTourIndex, prepare, withActuals } from "@/server/trail/service";
 
 export const maxDuration = 300;
@@ -16,10 +17,13 @@ type PartialAtlas = {
 };
 
 export async function POST(req: Request) {
-  let body: { owner: string; repo: string; sha: string };
+  let body: { owner: string; repo: string; sha: string; scope?: string };
   let who: string;
+  let runId: string | undefined;
   try {
-    body = repoAt.parse(await req.json());
+    const raw = await req.json();
+    body = repoAt.parse(raw);
+    runId = runIdOf(raw);
     who = await callerOf(req);
   } catch (error) {
     return errorResponse(error);
@@ -27,7 +31,7 @@ export async function POST(req: Request) {
   return sse(async (send) => {
     let lastSent = 0;
     let lastSize = 0;
-    const p = await prepare({ owner: body.owner, repo: body.repo, ref: body.sha });
+    const p = await prepare(refOf(body));
     send({ type: "start", tokens: p.summary.tokens });
     const { atlas } = await getAtlas(p, who, {
       onReasoning: (chars) => {
@@ -61,5 +65,5 @@ export async function POST(req: Request) {
     });
     const [ledger, tours] = await Promise.all([getLedger(p.info), getTourIndex(p.info)]);
     send({ type: "done", atlas, ledger, tours, summary: withActuals(p.summary, ledger) });
-  });
+  }, runId);
 }

@@ -92,6 +92,8 @@ export const atlasSchema = z.object({
         id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
         label: text(40),
         kind: z.enum(NODE_KINDS),
+        /** The architecture layer it sits in ("Routing", "Storage"…). Reads before layers existed don't have one. */
+        layer: text(30).optional(),
         purpose: text(300),
         files: upTo(z.string(), 15).pipe(z.array(z.string()).min(1)),
       }),
@@ -118,11 +120,12 @@ export const atlasJsonSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "label", "kind", "purpose", "files"],
+        required: ["id", "label", "kind", "layer", "purpose", "files"],
         properties: {
           id: { type: "string", description: "kebab-case id, unique" },
           label: { type: "string", description: "1-3 words" },
           kind: { type: "string", enum: [...NODE_KINDS] },
+          layer: { type: "string", description: "The architecture layer it belongs to, 1-3 words, e.g. 'Entry points', 'Routing', 'Storage', 'Build & tests'. 3-6 layers in total; modules in one layer use the exact same name." },
           purpose: { type: "string", description: "One sentence: what this module does." },
           files: { type: "array", items: { type: "string" }, description: "Exact file paths from the repository, most important first, at most 12." },
         },
@@ -135,7 +138,7 @@ export const atlasJsonSchema = {
         type: "object",
         additionalProperties: false,
         required: ["from", "to", "label"],
-        properties: { from: { type: "string" }, to: { type: "string" }, label: { type: "string", description: "2-4 words, e.g. 'calls', 'reads config'" } },
+        properties: { from: { type: "string" }, to: { type: "string" }, label: { type: "string", description: "2-4 plain words, e.g. 'calls', 'reads config', 'builds context'. No code and no sentences." } },
       },
     },
     tours: {
@@ -263,8 +266,9 @@ export type Atlas = Omit<AtlasAnswer, "edges" | "firstTour"> & {
 
 export type Tour = Omit<TourAnswer, "steps" | "followUps"> & {
   id: string;
-  /** "codetour": written by the repo's maintainers as a VS Code CodeTour file, imported and checked. */
-  source?: "codetour";
+  /** "codetour": written by the repo's maintainers as a VS Code CodeTour file, imported and checked. "custom": written
+   * (or edited from another tour) by someone on this instance, each step checked against the code. */
+  source?: "codetour" | "custom";
   question: string;
   steps: Step[];
   /** Steps whose line range was moved to where the anchor really is, and steps dropped as unverifiable. */
@@ -283,6 +287,8 @@ export type Price = { input: number; cached: number; output: number };
 export type RepoSummary = {
   owner: string;
   repo: string;
+  /** The folders this read covers, when not all of them (a scope string, src/lib/scope.ts). */
+  scope?: string;
   description: string | null;
   stars: number;
   ref: string;
@@ -312,9 +318,11 @@ export type RepoSummary = {
   otherFiles: [string, number, "signatures" | "left out"][];
   /** Import links between read files, as indexes into fileSizes (worked out from the code). */
   imports: [number, number][];
+  /** The line of the import behind each entry of `imports` (same order), when known. */
+  importLines?: (number | null)[];
   overBudget: string[];
   skippedSample: { path: string; reason: string }[];
 };
 
 /** A tour stored for a commit, listed so everyone opening the repo can replay it for free. */
-export type TourIndexEntry = { id: string; title: string; question: string; steps: number; cost: number | null; at: number; source?: "codetour" };
+export type TourIndexEntry = { id: string; title: string; question: string; steps: number; cost: number | null; at: number; source?: "codetour" | "custom" };

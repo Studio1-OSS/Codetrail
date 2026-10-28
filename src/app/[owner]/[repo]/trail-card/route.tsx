@@ -49,7 +49,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
     ? [
         { label: "STEPS", value: String(steps.length) },
         { label: "FILES", value: String(new Set(steps.map((s) => s.file)).size) },
-        { label: "LINES WALKED", value: String(steps.reduce((a, s) => a + s.endLine - s.startLine + 1, 0)) },
+        { label: "LINES COVERED", value: String(steps.reduce((a, s) => a + s.endLine - s.startLine + 1, 0)) },
         { label: "TIME", value: record ? `${(record.ms / 1000).toFixed(1)}s` : "—" },
         { label: record?.kind === "atlas" ? "COST · MAP + TOUR" : "COST", value: record?.cost != null ? `$${record.cost < 0.01 ? record.cost.toFixed(4) : record.cost.toFixed(3)}` : "—" },
         { label: "LINES CHECKED", value: `${steps.length} / ${steps.length}` },
@@ -73,7 +73,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
   const linePath = pts.map((q, i) => `${i ? "L" : "M"}${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ");
   const areaPath = pts.length ? `${linePath} L${pts.at(-1)!.x.toFixed(1)},${H} L${pts[0].x.toFixed(1)},${H} Z` : "";
 
-  const text = `${title}${owner}${repo}codetrail${stats.map((s) => s.label + s.value).join("")}${nodes.map((n) => n.label).join("")}${MODEL_LABEL}ELEVATION · WHERE IN THE FILE EACH STEP SITS0123456789/·.$ READ WHOLE BY PR #+-`;
+  const text = `${title}${owner}${repo}codetrail${stats.map((s) => s.label + s.value).join("")}${nodes.map((n) => n.label).join("")}${MODEL_LABEL}WHERE IN THE FILE EACH STEP SITS0123456789/·.$ READ WHOLE BY PR #+-`;
   // Subset the font to the characters used, in both cases (labels are upper-cased).
   const glyphs = [...new Set(text + text.toUpperCase())].join("");
   const [mono, monoBold] = await Promise.all([font("Martian Mono", 400, glyphs), font("Martian Mono", 700, glyphs)]).catch(() => [null, null]);
@@ -125,7 +125,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
           <div style={{ marginTop: "auto", display: "flex", flexDirection: "column" }}>
             {pts.length > 1 && (
               <div style={{ display: "flex", flexDirection: "column", width: W }}>
-                <div style={{ display: "flex", width: W, fontSize: 11, letterSpacing: 2, color: FG3 }}>ELEVATION · WHERE IN THE FILE EACH STEP SITS</div>
+                <div style={{ display: "flex", width: W, fontSize: 11, letterSpacing: 2, color: FG3 }}>WHERE IN THE FILE EACH STEP SITS</div>
                 <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ marginTop: 8 }}>
                   <line x1="0" y1={H - 1} x2={W} y2={H - 1} stroke={LINE} />
                   <path d={areaPath} fill="rgba(255,176,32,0.16)" />

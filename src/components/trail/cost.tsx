@@ -1,10 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useRef } from "react";
 import { uncachedCost } from "@/lib/cache";
 import { cachedShare, formatTokens, formatUsd, perMillion, seconds } from "@/lib/format";
 import type { CallRecord, RepoSummary } from "@/lib/schemas";
+import { useModal } from "./dialog";
 import { Receipt } from "./receipt";
 
 const totalCost = (ledger: CallRecord[]) => ledger.reduce((a, c) => a + (c.cost ?? 0), 0);
@@ -51,20 +52,16 @@ export function CallLine({ call }: { call: CallRecord }) {
 }
 
 export function CostDrawer({ open, onClose, ledger, summary }: { open: boolean; onClose: () => void; ledger: CallRecord[]; summary: RepoSummary }) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const panel = useRef<HTMLElement>(null);
+  useModal(panel, onClose, open);
   if (!open) return null;
   const input = ledger.reduce((a, c) => a + c.usage.input, 0);
   const cached = ledger.reduce((a, c) => a + c.usage.cached, 0);
   const p = summary.price;
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Close" className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-line bg-night">
+      <button aria-label="Close" tabIndex={-1} className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={onClose} />
+      <aside ref={panel} role="dialog" aria-modal="true" aria-label="What this repo cost" tabIndex={-1} className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-line bg-night outline-none">
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
             <h2 className="font-display text-[20px] font-medium tracking-tight [font-stretch:85%]">What this repo cost</h2>
@@ -78,7 +75,7 @@ export function CostDrawer({ open, onClose, ledger, summary }: { open: boolean; 
           <div className="grid grid-cols-3 border-y border-line">
             {[
               { label: "Paid", value: formatUsd(totalCost(ledger)), cls: "text-trail" },
-              { label: "Saved by cache", value: formatUsd(totalSaved(ledger, summary)), cls: "text-verified" },
+              { label: "Saved by cached input", value: formatUsd(totalSaved(ledger, summary)), cls: "text-verified" },
               { label: "Input cached", value: `${input ? Math.round((cached / input) * 100) : 0}%`, cls: "text-fg" },
             ].map((s) => (
               <div key={s.label} className="py-3 pr-2">

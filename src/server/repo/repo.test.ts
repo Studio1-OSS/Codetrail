@@ -63,6 +63,10 @@ describe("buildImportGraph", () => {
       ]),
     );
     expect(g.entries).toContain("src/index.ts");
+    // The import line behind each link, for the map's evidence panel.
+    expect(g.lines.get("src/index.ts\u0000src/lib/a.ts")).toBe(1);
+    expect(g.lines.get("src/index.ts\u0000src/lib/b.ts")).toBe(3);
+    expect(g.lines.get("src/lib/b.ts\u0000src/util/index.ts")).toBe(1);
   });
 
   it("resolves Python absolute and relative imports", () => {
@@ -123,7 +127,7 @@ describe("packRepo", () => {
     expect(priorityOf("examples/demo/package.json", entries, fanIn)).toBeGreaterThan(priorityOf("src/x.ts", entries, fanIn));
 
     const files = [file("README.md", "hello"), file("src/index.ts", "a\n".repeat(50)), file("tests/big.test.ts", "b\n".repeat(5_000))];
-    const pack = packRepo(files, { edges: [], entries: ["src/index.ts"] }, 500);
+    const pack = packRepo(files, { edges: [], lines: new Map(), entries: ["src/index.ts"] }, 500);
     expect(pack.included.map((f) => f.path)).toEqual(["README.md", "src/index.ts"]);
     expect(pack.overBudget.map((f) => f.path)).toEqual(["tests/big.test.ts"]);
     expect(pack.text).toContain("=== src/index.ts (51 lines) ===\n1| a");

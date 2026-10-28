@@ -15,19 +15,19 @@ export const dynamic = "force-dynamic";
 
 const HOW = [
   {
-    km: "KM 0 · Read",
+    km: "1 · Read",
     title: "The whole repo, one prompt",
     body: `${MODEL_LABEL} holds 1M tokens, so every file goes in at once with line numbers. No index picking chunks, so a flow across ten files stays whole.`,
   },
   {
-    km: "KM 1 · Check",
+    km: "2 · Check",
     title: "Every step against the real file",
     body: "Each step quotes one line. Codetrail finds it in the file at that commit and fixes the range if the model drifted. Steps it can't find are dropped, never shown.",
   },
   {
-    km: "KM 2 · Share",
+    km: "3 · Share",
     title: "Saved, shareable, reusable",
-    body: "Every tour gets a link to the exact step and a trail card for sharing. Tours, docs and answers are saved, so the next person opens them free. Pull requests get their own tour on top of the same read.",
+    body: "Every tour gets a link to the exact step and a share card for its link preview. Tours, docs and answers are saved, so the next person opens them free. Pull requests get their own tour on top of the same read.",
   },
 ];
 
@@ -62,7 +62,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can I ask follow-up questions?",
-    a: "Yes. Under every answer and tour there are suggested follow-ups and a box for your own. Each follow-up gets a short recap of the conversation, so the answer builds on what was said, and every code reference is checked like the rest. Conversations get their own link. For harder questions, Thorough mode traces the answer across every file involved.",
+    a: "Yes. Under every answer and repo tour (not pull-request tours) there are suggested follow-ups and a box for your own. Each follow-up gets a short recap of the conversation, so the answer builds on what was said, and every code reference is checked like the rest. Conversations get their own link. For harder questions, Thorough mode traces the answer across every file involved.",
   },
   {
     q: "Can it explain a pull request?",
@@ -70,7 +70,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can my coding agent use it?",
-    a: "Yes. The MCP server gives Claude Code, Cursor and other agents the map, tours, answers with follow-ups and pull-request tours of any repo, hosted at /api/mcp or run locally. Tours also export to VS Code CodeTour, and docs export as Markdown.",
+    a: "Yes. The MCP server gives Claude Code, Cursor and other agents the map, tours, answers with follow-ups and pull-request tours of any GitHub repo (and, self-hosted, your local folders), at /api/mcp or run locally. Tours also export to VS Code CodeTour, and docs export as Markdown.",
   },
   {
     q: "How is it different from DeepWiki or GitDiagram?",
@@ -90,21 +90,25 @@ const t = (text: string): Cell => ({ text });
 const dash = t("—");
 
 const COMPARE: { cap: string; cells: [Cell, Cell, Cell, Cell, Cell] }[] = [
-  { cap: "How much of the repo the model reads", cells: [y("Every file, one prompt"), t("Tree, README, excerpts"), dash, t("Hand-written"), dash] },
-  { cap: "Architecture map", cells: [y(), y(), y(), dash, y()] },
-  { cap: "Written docs for every module", cells: [y("Checked refs"), dash, y("Wiki"), dash, dash] },
-  { cap: "Ask questions about the code", cells: [y("With follow-ups"), dash, y(), dash, y()] },
-  { cap: "Similar questions answered free", cells: [y("Stored, matched as you type"), dash, dash, dash, dash] },
-  { cap: "Step-by-step tours with file + line", cells: [y("Generated"), dash, dash, y("Hand-written"), dash] },
-  { cap: "Pull-request tours", cells: [y("Generated, with review notes"), dash, dash, y("Hand-written"), dash] },
-  { cap: "Line ranges checked against the code", cells: [y(), t("Paths checked"), dash, dash, dash] },
-  { cap: "Export the map", cells: [y("Mermaid, SVG"), y("Mermaid, PNG"), dash, dash, y("Mermaid")] },
-  { cap: "Cost shown for every call", cells: [y(), dash, dash, dash, dash] },
-  { cap: "Works from a URL in the browser", cells: [y(), y(), y(), t("VS Code"), t("VS Code")] },
+  { cap: "What the model sees", cells: [y("Every file, one prompt"), t("Tree, README, source excerpts"), t("An index, searched per page and question"), t("No model"), t("AI agents search the code")] },
+  { cap: "Architecture diagram", cells: [y("Layers, routed links; open a module into its files"), y("Layers, colours, links"), y("Mermaid in wiki pages"), dash, y("C4 and UML, editable")] },
+  { cap: "Written docs for every module", cells: [y("References checked, a diagram per page"), t("A short overview"), y("A wiki"), dash, t("Diagram-led docs")] },
+  { cap: "Ask questions about the code", cells: [y("Follow-ups, Thorough mode"), dash, y("Deep Research"), dash, y()] },
+  { cap: "Step-by-step walkthroughs with file + line", cells: [y("Generated or yours, every line checked"), dash, t("Codemaps"), y("Hand-written"), t("In search results")] },
+  { cap: "Tour markers in the code, progress", cells: [y(), dash, dash, y(), dash] },
+  { cap: "Pull requests", cells: [y("A tour of the change, review notes"), dash, dash, t("Tours pinned to a commit"), t("PR diagrams (paid plan)")] },
+  { cap: "Checked against the code", cells: [y("Every quoted line"), t("Every linked path"), dash, t("Drift warnings in CI"), dash] },
+  { cap: "Export the diagram", cells: [y("Mermaid, SVG, PNG, draw.io"), y("Mermaid, PNG"), dash, t(".tour files"), y("Mermaid, draw.io, PNG, SVG")] },
+  { cap: "A live diagram image for a README", cells: [y("With a badge"), y("With a badge"), t("A badge"), dash, t("Embeds (Teams plan)")] },
+  { cap: "Markdown page for AI tools", cells: [y("/owner/repo.md, llms.txt"), y("/owner/repo.md, llms.txt"), dash, dash, dash] },
+  { cap: "Read only some folders", cells: [y("Folders or globs"), dash, t("Page list in .devin/wiki.json"), dash, dash] },
+  { cap: "What it costs you", cells: [y("Your key; price before and after every call"), t("Free quota, cost after a run"), t("Free for public repos"), t("Free"), t("Free tier, Pro $19/month")] },
+  { cap: "Works from a URL in the browser", cells: [y(), y(), y(), t("VS Code (desktop and web)"), t("VS Code")] },
   { cap: "MCP server for coding agents", cells: [y(), y(), y(), dash, dash] },
-  { cap: "Open source", cells: [y(), y("MIT"), t("Hosted"), y("MIT"), dash] },
-  { cap: "Private repositories", cells: [y("Self-hosted, local folders"), y("With a token"), y("Paid plan"), y("Local files"), y("Local files")] },
-  { cap: "Function-level call graph", cells: [t("Imports only"), dash, dash, dash, y()] },
+  { cap: "Open source", cells: [y("MIT"), y("MIT"), t("No"), y("MIT"), t("No")] },
+  { cap: "Private code", cells: [y("Self-hosted, local folders"), y("With a GitHub token"), t("With a Devin account"), y("Local files"), t("Local folders; code goes to cloud models")] },
+  { cap: "Function-level call graph", cells: [y("JS/TS, Python, Go"), dash, dash, dash, y("From the language server")] },
+  { cap: "Explainer video of a repo", cells: [dash, y(), dash, dash, dash] },
 ];
 
 export default async function Home() {
@@ -119,7 +123,7 @@ export default async function Home() {
       name: "Codetrail",
       applicationCategory: "DeveloperApplication",
       operatingSystem: "Web",
-      description: `Diagram, wiki, code tour and Q&A for any GitHub repo, read whole by ${MODEL_LABEL}.`,
+      description: `Diagram, docs, code tour and Q&A for any GitHub repo, read whole by ${MODEL_LABEL}.`,
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       isAccessibleForFree: true,
     },
@@ -132,14 +136,14 @@ export default async function Home() {
       <Headlamp terrain={trail.terrain} waypoints={trail.waypoints}>
         <SiteHeader overlay />
         <div className="relative mx-auto max-w-[1240px] px-4 pt-16 pb-24 sm:px-6 sm:pt-24 sm:pb-32">
-          <p className="font-mono text-[11px] tracking-[0.22em] text-trail uppercase">Trailhead · {MODEL_LABEL} · 1M tokens</p>
+          <p className="font-mono text-[11px] tracking-[0.22em] text-trail uppercase">{MODEL_LABEL} · 1M-token context</p>
           <h1 className="mt-5 max-w-[900px] font-display text-[44px] leading-[0.98] font-light tracking-[-0.05em] [font-stretch:78%] sm:text-[84px]">
             Every repo is a <span className="font-extrabold text-trail [font-stretch:112%]">trail</span>.
             <br />
             Walk it<span className="caret text-trail">_</span>
           </h1>
           <p className="mt-6 max-w-[520px] bg-ink/55 text-[17px] leading-relaxed text-fg-2 backdrop-blur-sm">
-            Diagram, wiki, code tour and Q&amp;A, in one link. Paste any GitHub repo: {MODEL_LABEL} reads every file at once, draws the architecture, writes the docs and walks
+            Diagram, docs, code tour and Q&amp;A, in one link. Paste any GitHub repo: {MODEL_LABEL} reads every file at once, draws the architecture, writes the docs and walks
             you through how the code actually runs, line by checked line.
           </p>
           <div className="mt-9">
@@ -156,6 +160,22 @@ export default async function Home() {
       </Headlamp>
 
       <LiveStats initial={totals} />
+
+      {folders.length > 0 && (
+        <section className="mx-auto max-w-[1240px] px-4 pt-12 sm:px-6">
+          <h2 className="font-mono text-[11px] tracking-[0.2em] text-fg-3 uppercase">Your folders</h2>
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {folders.slice(0, 40).map((f) => (
+              <li key={f.name}>
+                <Link href={`/${LOCAL_OWNER}/${f.name}`} className="inline-block rounded-[10px] border border-line px-3 py-1.5 font-mono text-[13px] text-fg-2 hover:border-trail/60 hover:text-fg">
+                  {f.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
 
       <section id="how" className="mx-auto max-w-[1240px] scroll-mt-4 px-4 py-20 sm:px-6">
         <h2 className="font-display text-[34px] leading-none font-light tracking-[-0.05em] [font-stretch:80%] sm:text-[52px]">
@@ -192,7 +212,7 @@ export default async function Home() {
         <h2 className="font-display text-[34px] leading-none font-light tracking-[-0.05em] [font-stretch:80%] sm:text-[52px]">
           Four tools, <span className="font-extrabold text-trail [font-stretch:105%]">one link.</span>
         </h2>
-        <p className="mt-3 max-w-2xl text-[16px] text-fg-2">Architecture diagrams, an AI wiki, hand-written code tours and a code map usually live in four places. Here&apos;s where each one stands, gaps included.</p>
+        <p className="mt-3 max-w-2xl text-[16px] text-fg-2">Architecture diagrams, AI-written docs, hand-written code tours and a code map usually live in four places. Here&apos;s where each one stands, gaps included.</p>
         <div className="relative mt-8 overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-[14px]">
             <thead>
@@ -256,24 +276,14 @@ export default async function Home() {
         </div>
       </section>
 
-      {folders.length > 0 && (
-        <section className="mx-auto max-w-[1240px] px-4 pb-14 sm:px-6">
-          <h2 className="font-mono text-[11px] tracking-[0.2em] text-fg-3 uppercase">Your folders</h2>
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {folders.slice(0, 40).map((f) => (
-              <li key={f.name}>
-                <Link href={`/${LOCAL_OWNER}/${f.name}`} className="inline-block rounded-[10px] border border-line px-3 py-1.5 font-mono text-[13px] text-fg-2 hover:border-trail/60 hover:text-fg">
-                  {f.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       {recent.length > 0 && (
         <section className="mx-auto max-w-[1240px] px-4 pb-20 sm:px-6">
-          <h2 className="font-mono text-[11px] tracking-[0.2em] text-fg-3 uppercase">Recently walked · replay free</h2>
+          <h2 className="flex items-baseline justify-between gap-3 font-mono text-[11px] tracking-[0.2em] text-fg-3 uppercase">
+            Recent repos · free to replay
+            <Link href="/browse" className="tracking-[0.1em] text-trail normal-case hover:underline">
+              Browse all →
+            </Link>
+          </h2>
           <ul className="mt-4 divide-y divide-line border-y border-line">
             {recent.slice(0, 8).map((r) => (
               <li key={`${r.owner}/${r.repo}`}>

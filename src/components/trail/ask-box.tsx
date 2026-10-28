@@ -18,7 +18,7 @@ const MODES: { id: AskMode; label: string; hint: string }[] = [
 const KIND_LABEL: Record<Stored["kind"], string> = { tour: "tour", answer: "answer", docs: "docs page", thread: "conversation" };
 
 /** What one question costs: the repo as cached input (or not), the question (and a follow-up's recap), the reply. */
-function costOf(summary: RepoSummary, mode: AskMode, followUp: boolean) {
+export function costOf(summary: RepoSummary, mode: AskMode, followUp: boolean) {
   const p = summary.price;
   if (!p) return null;
   const fresh = followUp ? 3_000 : 500;
@@ -31,7 +31,8 @@ type Props = {
   label: string;
   placeholder: string;
   busy: boolean;
-  onAsk: (question: string, mode: AskMode) => void;
+  /** Resolves false when the question failed, so the box gives the text back. */
+  onAsk: (question: string, mode: AskMode) => Promise<boolean> | void;
   /** Stored work to offer before asking (the sidebar); follow-ups have none. */
   stored?: Stored[];
   onOpenStored?: (item: Stored) => void;
@@ -51,9 +52,10 @@ export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpe
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (q.length < 3 || busy) return;
-    onAsk(q, mode);
+    const asked = question;
     setQuestion("");
     setPicked(null);
+    Promise.resolve(onAsk(q, mode)).then((ok) => ok === false && setQuestion((now) => now || asked));
   }
 
   return (
@@ -108,6 +110,7 @@ export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpe
           Ask <CornerDownLeft className="size-3" />
         </button>
       </div>
+      {question.length > 240 && <p className="mt-1 font-mono text-[10.5px] text-fg-3">{300 - question.length} characters left</p>}
       <p id={`${id}-cost`} className="mt-1.5 font-mono text-[10.5px] text-fg-3">
         {cost ? `≈ ${formatUsd(cost.cached)} if the repo is cached · up to ${formatUsd(cost.cold)}` : "Priced after the call"}
       </p>

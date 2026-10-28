@@ -1,5 +1,5 @@
 // A paper receipt for one model call: fresh and cached input, output (reasoning included), total, and what
-// cached input saved. Prices are the live per-token prices the call was billed at.
+// cached input saved. The total is what the call was billed; the lines use today's per-token prices.
 import { savedBy } from "@/lib/cache";
 import { formatUsd, seconds } from "@/lib/format";
 import type { CallRecord, Price } from "@/lib/schemas";
@@ -34,6 +34,9 @@ export function Receipt({ call, price, title, model }: { call: CallRecord; price
         <span>Saved by cached input</span>
         <span>{formatUsd(saved ?? 0)}</span>
       </p>
+      {price && call.cost !== null && Math.abs(fresh * price.input + cached * price.cached + call.usage.output * price.output - call.cost) > Math.max(0.0001, call.cost * 0.01) && (
+        <p className="mt-1 text-[10.5px] text-[#7a7262]">Lines at today&apos;s prices; the total is what this call was billed.</p>
+      )}
       <p className="mt-2.5 text-[10.5px] text-[#7a7262]">
         {model} · {seconds(call.ms)}
         {call.attempts > 1 ? ` · ${call.attempts} attempts` : ""} · {Math.round((cached / Math.max(1, call.usage.input)) * 100)}% of input from cache

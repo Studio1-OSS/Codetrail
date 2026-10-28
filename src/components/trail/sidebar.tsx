@@ -9,6 +9,7 @@ import type { AskMode, Stored } from "@/lib/match";
 import { PALETTE } from "@/lib/palette";
 import { LOCAL_OWNER, parseRepoInput } from "@/lib/ref";
 import type { Atlas, CallRecord, PullIndexEntry, RepoSummary, TourIndexEntry } from "@/lib/schemas";
+import { seenLabel } from "@/lib/progress";
 import type { ThreadIndexEntry } from "@/lib/thread";
 import { AskBox } from "./ask-box";
 import { sameText } from "./player";
@@ -36,7 +37,7 @@ type Props = {
   answers: { id: string; question: string; title: string }[];
   activeAnswerId: string | null;
   onOpenAnswer: (id: string) => void;
-  onAsk: (question: string, mode: AskMode) => void;
+  onAsk: (question: string, mode: AskMode) => Promise<boolean>;
   docsPages: DocPage[] | null;
   docsBusy: boolean;
   onDocs: (node?: string) => void;
@@ -45,17 +46,26 @@ type Props = {
   threads: ThreadIndexEntry[];
   activeThreadId: string | null;
   onOpenThread: (id: string) => void;
+  /** Steps seen per tour, in this browser. */
+  seen: Record<string, number[]>;
+  /** Starts writing a tour by hand. */
+  onWrite: () => void;
 };
 
 export function Sidebar(props: Props) {
-  const { summary, atlas, tours, ledger, activeTourId, tracing, onOpenTour, onTrace, answers, activeAnswerId, onOpenAnswer, onAsk, docsPages, docsBusy, onDocs, pulls, activePull, threads, activeThreadId, onOpenThread } = props;
+  const { summary, atlas, tours, ledger, activeTourId, tracing, onOpenTour, onTrace, answers, activeAnswerId, onOpenAnswer, onAsk, docsPages, docsBusy, onDocs, pulls, activePull, threads, activeThreadId, onOpenThread, seen, onWrite } = props;
+  const progress = (t: { id: string; steps: number }) => {
+    const label = seenLabel(seen[t.id], t.steps);
+    return label ? ` · ${label}` : "";
+  };
   const [overview, setOverview] = useState(true);
   const local = summary.owner === LOCAL_OWNER;
   const byQuestion = new Map(tours.map((t) => [norm(t.question), t]));
   const suggested = atlas.tours.map((t) => ({ ...t, traced: byQuestion.get(norm(t.question)) }));
   const suggestedSet = new Set(atlas.tours.map((t) => norm(t.question)));
-  const asked = tours.filter((t) => !suggestedSet.has(norm(t.question)) && t.source !== "codetour").sort((a, b) => b.at - a.at);
+  const asked = tours.filter((t) => !suggestedSet.has(norm(t.question)) && !t.source).sort((a, b) => b.at - a.at);
   const maintainers = tours.filter((t) => t.source === "codetour");
+  const yours = tours.filter((t) => t.source === "custom").sort((a, b) => b.at - a.at);
   const langs = Object.entries(summary.languages).sort((a, b) => b[1] - a[1]);
   const langTotal = langs.reduce((a, [, n]) => a + n, 0) || 1;
 
@@ -137,7 +147,12 @@ export function Sidebar(props: Props) {
       </button>
 
       <div>
-        <h3 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Tours</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Tours</h3>
+          <button onClick={onWrite} disabled={tracing !== null} className="font-mono text-[10.5px] text-trail hover:underline disabled:opacity-40" title="Write your own tour: pick lines of code and say what they do. Free.">
+            + Write a tour
+          </button>
+        </div>
         <ul className="mt-2">
           {suggested.map((t) => (
             <TourItem
@@ -147,17 +162,27 @@ export function Sidebar(props: Props) {
               active={!!t.traced && t.traced.id === activeTourId}
               tracing={tracing !== null && norm(tracing) === norm(t.question)}
               disabled={tracing !== null && !t.traced}
-              meta={t.traced ? `${t.traced.steps} steps · free to replay` : `trace · ≈ ${formatUsd(summary.estimate.followUp)} cached`}
+              meta={t.traced ? `${t.traced.steps} steps${progress(t.traced) || " · free to replay"}` : `walk through it · ≈ ${formatUsd(summary.estimate.followUp)}, up to ${formatUsd(summary.estimate.followUpCold)}`}
               onClick={() => (t.traced ? onOpenTour(t.traced.id) : onTrace(t.question))}
             />
           ))}
         </ul>
+        {yours.length > 0 && (
+          <>
+            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Your tours</h3>
+            <ul className="mt-2">
+              {yours.map((t) => (
+                <TourItem key={t.id} title={t.title} question={t.question} active={t.id === activeTourId} tracing={false} disabled={false} meta={`${t.steps} steps · written here${progress(t)}`} onClick={() => onOpenTour(t.id)} />
+              ))}
+            </ul>
+          </>
+        )}
         {maintainers.length > 0 && (
           <>
             <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Written by the maintainers</h3>
             <ul className="mt-2">
               {maintainers.map((t) => (
-                <TourItem key={t.id} title={t.title} question={t.question} active={t.id === activeTourId} tracing={false} disabled={false} meta={`${t.steps} steps · CodeTour file · checked`} onClick={() => onOpenTour(t.id)} />
+                <TourItem key={t.id} title={t.title} question={t.question} active={t.id === activeTourId} tracing={false} disabled={false} meta={`${t.steps} steps · CodeTour file · checked${progress(t)}`} onClick={() => onOpenTour(t.id)} />
               ))}
             </ul>
           </>
@@ -166,7 +191,7 @@ export function Sidebar(props: Props) {
           <>
             <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Answers</h3>
             <ul className="mt-2">
-              {answers.map((a) => (
+              {[...answers].reverse().map((a) => (
                 <TourItem key={a.id} title={a.title} question={a.question} active={a.id === activeAnswerId} tracing={false} disabled={false} meta="answer · free to replay" onClick={() => onOpenAnswer(a.id)} />
               ))}
             </ul>
@@ -186,7 +211,7 @@ export function Sidebar(props: Props) {
         )}
         {asked.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Asked by people</h3>
+            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Asked here</h3>
             <ul className="mt-2">
               {asked.map((t) => (
                 <TourItem
@@ -196,7 +221,7 @@ export function Sidebar(props: Props) {
                   active={t.id === activeTourId}
                   tracing={false}
                   disabled={false}
-                  meta={`${t.steps} steps · free to replay`}
+                  meta={`${t.steps} steps${progress(t) || " · free to replay"}`}
                   onClick={() => onOpenTour(t.id)}
                 />
               ))}
@@ -243,7 +268,7 @@ function TourItem(props: { title: string; question: string; meta: string; active
         )}
         <span className={`mt-1 flex items-center gap-1.5 font-mono text-[10.5px] ${props.active ? "text-trail" : "text-fg-3"}`}>
           {props.tracing && <Loader2 className="size-3 animate-spin text-trail" />}
-          {props.tracing ? "tracing…" : props.meta}
+          {props.tracing ? "walking through…" : props.meta}
         </span>
       </button>
     </li>
@@ -254,8 +279,10 @@ function TourItem(props: { title: string; question: string; meta: string; active
 function PullRequests({ summary, pulls, active }: { summary: RepoSummary; pulls: PullIndexEntry[]; active: number | null }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const latest = [...new Map([...pulls].sort((a, b) => a.at - b.at).map((p) => [p.number, p])).values()].reverse();
-  const go = (n: number) => window.location.assign(`/${summary.owner}/${summary.repo}/pull/${n}`);
+  // Newest first; a PR toured again after a new push keeps its earlier tours, listed under the latest.
+  const byNumber = new Map<number, PullIndexEntry[]>();
+  for (const p of [...pulls].sort((a, b) => b.at - a.at)) byNumber.set(p.number, [...(byNumber.get(p.number) ?? []), p]);
+  const go = (n: number, tourId?: string) => window.location.assign(`/${summary.owner}/${summary.repo}/pull/${n}${tourId ? `?tour=${tourId}` : ""}`);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -268,10 +295,19 @@ function PullRequests({ summary, pulls, active }: { summary: RepoSummary; pulls:
   return (
     <div>
       <h3 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Pull requests</h3>
-      {latest.length > 0 && (
+      {byNumber.size > 0 && (
         <ul className="mt-2">
-          {latest.map((p) => (
-            <TourItem key={p.id} title={p.title} question={p.title} active={p.number === active} tracing={false} disabled={false} meta={`#${p.number} · ${p.steps} steps · ${p.review} notes · free to replay`} onClick={() => go(p.number)} />
+          {[...byNumber.values()].map(([p, ...older]) => (
+            <li key={p.id}>
+              <ul>
+                <TourItem title={p.title} question={p.title} active={p.number === active} tracing={false} disabled={false} meta={`#${p.number} · ${p.steps} steps · ${p.review} notes · free to replay`} onClick={() => go(p.number)} />
+              </ul>
+              {older.map((o) => (
+                <button key={o.id} onClick={() => go(o.number, o.id)} className="ml-3 block py-1 font-mono text-[10.5px] text-fg-3 hover:text-fg">
+                  earlier push · {o.headSha.slice(0, 7)} · {o.steps} steps
+                </button>
+              ))}
+            </li>
           ))}
         </ul>
       )}

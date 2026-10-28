@@ -22,7 +22,7 @@ describe("signatures", () => {
 describe("packRepo with compression", () => {
   it("sends files that don't fit whole as signatures, in priority order", () => {
     const big = Array.from({ length: 400 }, (_, i) => (i % 20 === 0 ? `export function f${i}() {` : "  doWork();")).join("\n");
-    const pack = packRepo([file("README.md", "hi"), file("src/index.ts", "export const a = 1;"), file("src/big.ts", big)], { edges: [], entries: ["src/index.ts"] }, 900);
+    const pack = packRepo([file("README.md", "hi"), file("src/index.ts", "export const a = 1;"), file("src/big.ts", big)], { edges: [], lines: new Map(), entries: ["src/index.ts"] }, 900);
     expect(pack.included.map((f) => f.path)).toEqual(["README.md", "src/index.ts"]);
     expect(pack.compressed.map((f) => f.path)).toEqual(["src/big.ts"]);
     expect(pack.text).toContain("signatures only");

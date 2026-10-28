@@ -1,7 +1,7 @@
 // Turns whatever someone pastes into owner/repo (+ an optional branch, tag or commit).
 // No server-only import: the browser uses it to route `/owner/repo` before anything is fetched.
 
-export type RepoRef = { owner: string; repo: string; ref?: string; path?: string; pull?: number };
+export type RepoRef = { owner: string; repo: string; ref?: string; path?: string; pull?: number; /** Folders read, as a scope string (src/lib/scope.ts). */ scope?: string };
 
 const NAME = /^[A-Za-z0-9_.-]+$/;
 

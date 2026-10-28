@@ -8,7 +8,17 @@ import type { RepoSummary, Tour } from "@/lib/schemas";
 import { blobUrl, mdLink as link } from "@/lib/ref";
 import { Dialog } from "./dialog";
 
-function tourToMarkdown(tour: Tour, s: RepoSummary) {
+/** The commit a step's file is shown at: a PR tour's changed files at the PR's head, everything else at the read. */
+const shaFor = (tour: Tour, s: RepoSummary, file: string) => (tour.pull?.files.some((f) => f.path === file && f.status !== "removed") ? tour.pull.headSha : s.sha);
+
+const fence = (lines: string[], file: string) => {
+  const ext = file.split(".").pop() ?? "";
+  const tick = lines.some((l) => l.includes("```")) ? "````" : "```";
+  return [`${tick}${/^[a-z0-9]+$/i.test(ext) ? ext : ""}`, ...lines, tick];
+};
+
+function tourToMarkdown(tour: Tour, s: RepoSummary, files: Record<string, string[]>) {
+  const at = tour.pull?.headSha ?? s.sha;
   return [
     `# ${tour.title}`,
     "",
@@ -16,8 +26,16 @@ function tourToMarkdown(tour: Tour, s: RepoSummary) {
     "",
     tour.summary,
     "",
-    ...tour.steps.flatMap((st, i) => [`## ${i + 1}. ${st.title}`, "", link(`\`${st.file}:${st.startLine}-${st.endLine}\``, blobUrl(s.owner, s.repo, s.sha, st.file, st.startLine, st.endLine)), "", st.narration, ""]),
-    `Traced by Codetrail with DeepSeek V4.1 Flash 1017 at commit ${s.sha.slice(0, 7)}; every line range was checked against the code.`,
+    ...tour.steps.flatMap((st, i) => [
+      `## ${i + 1}. ${st.title}`,
+      "",
+      link(`\`${st.file}:${st.startLine}-${st.endLine}\``, blobUrl(s.owner, s.repo, shaFor(tour, s, st.file), st.file, st.startLine, st.endLine)),
+      "",
+      st.narration,
+      "",
+      ...(files[st.file] ? [...fence(files[st.file].slice(st.startLine - 1, st.endLine), st.file), ""] : []),
+    ]),
+    `Explained by Codetrail with DeepSeek V4.1 Flash 1017 at commit ${at.slice(0, 7)}; every line range was checked against the code.`,
   ].join("\n");
 }
 
@@ -26,7 +44,7 @@ export function TranscriptDialog({ tour, summary, onClose }: { tour: Tour; summa
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     for (const path of new Set(tour.steps.map((s) => s.file))) {
-      fetch(`/api/file?owner=${encodeURIComponent(summary.owner)}&repo=${encodeURIComponent(summary.repo)}&sha=${summary.sha}&path=${encodeURIComponent(path)}`)
+      fetch(`/api/file?owner=${encodeURIComponent(summary.owner)}&repo=${encodeURIComponent(summary.repo)}&sha=${shaFor(tour, summary, path)}&path=${encodeURIComponent(path)}`)
         .then((r) => (r.ok ? r.text() : ""))
         .then((t) => setFiles((f) => ({ ...f, [path]: t.split("\n") })))
         .catch(() => {});
@@ -45,14 +63,14 @@ export function TranscriptDialog({ tour, summary, onClose }: { tour: Tour; summa
         </div>
         <button
           onClick={() =>
-            navigator.clipboard?.writeText(tourToMarkdown(tour, summary)).then(() => {
+            navigator.clipboard?.writeText(tourToMarkdown(tour, summary, files)).then(() => {
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             })
           }
           className="shrink-0 rounded-[8px] border border-line px-2.5 py-1 font-mono text-[11px] text-fg-2 hover:text-fg"
         >
-          {copied ? "Copied" : "Copy as Markdown"}
+          {copied ? "Copied" : "Copy as Markdown, with the code"}
         </button>
       </div>
       <ol className="mt-5 space-y-6">

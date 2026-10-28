@@ -3,6 +3,7 @@
 // prompt cache can serve them after the first few calls. Only the last message changes.
 import OpenAI from "openai";
 import type { z } from "zod";
+import { callSignal, CancelledError } from "@/server/cancel";
 import type { TokenUsage } from "./pricing";
 
 export type CallUsage = TokenUsage & { model: string; ms: number };
@@ -89,8 +90,10 @@ export function cleanModelJson(raw: string): string {
 }
 
 const providerError = (error: unknown) =>
-  error instanceof AIError
+  error instanceof AIError || error instanceof CancelledError
     ? error
+    : error instanceof OpenAI.APIUserAbortError
+      ? new CancelledError()
     : new AIError(
         error instanceof OpenAI.APIError ? `The AI service returned ${error.status ?? "an error"}: ${error.message}` : "Could not reach the AI service",
         "provider",
@@ -124,12 +127,15 @@ export type StreamHooks = {
 /** One completion. Streams when hooks are given, so the UI can show the answer as it's written. */
 async function complete(config: NebiusConfig, body: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming, hooks?: StreamHooks) {
   const started = Date.now();
+  // Aborted when everyone waiting on this call pressed Stop.
+  const signal = callSignal();
+  if (signal?.aborted) throw new CancelledError();
   if (!hooks) {
-    const r = await getClient(config).chat.completions.create(body);
+    const r = await getClient(config).chat.completions.create(body, { signal });
     if (r.usage) config.onUsage?.({ model: body.model, ms: Date.now() - started, ...usageOf(r.usage) });
     return { content: r.choices[0]?.message?.content ?? "", reasoning: reasoningOf(r.choices[0]?.message), finish: r.choices[0]?.finish_reason };
   }
-  const stream = await getClient(config).chat.completions.create({ ...body, stream: true, stream_options: { include_usage: true } });
+  const stream = await getClient(config).chat.completions.create({ ...body, stream: true, stream_options: { include_usage: true } }, { signal });
   let content = "";
   let reasoning = "";
   let finish: string | null | undefined;

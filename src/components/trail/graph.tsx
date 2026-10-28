@@ -10,6 +10,8 @@ import "d3-transition";
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { Maximize2, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { touchFriendly } from "@/lib/touch";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 
 export type GraphNode = {
   id: string;
@@ -71,6 +73,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
   const [hover, setHover] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
+  const still = useReducedMotion();
   const fitRef = useRef<(() => void) | null>(null);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -143,6 +146,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
     if (!svg) return;
     const z = d3zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.15, 3])
+      .filter(touchFriendly)
       .on("zoom", (e) => setTransform(e.transform));
     zoomRef.current = z;
     select(svg).call(z).on("dblclick.zoom", null);
@@ -259,7 +263,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <svg ref={svgRef} className="h-full w-full touch-none select-none" role="group" aria-label="Graph of the repository. Tab through the nodes; Enter opens one." onClick={(e) => e.target === svgRef.current && onSelect(null)}>
+      <svg ref={svgRef} className="h-full w-full touch-pan-y select-none lg:touch-none" role="group" aria-label="Graph of the repository. Tab through the nodes; Enter opens one." onClick={(e) => e.target === svgRef.current && onSelect(null)}>
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="#8a88a0" />
@@ -306,7 +310,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
                   className={isHop ? "trail-dash" : undefined}
                   markerEnd={`url(#${isHop ? "arrow-trail" : l.verified ? "arrow-verified" : "arrow"})`}
                 />
-                {isHop && (
+                {isHop && !still && (
                   <circle r={7} fill={TRAIL} style={{ stroke: OUTLINE }} strokeWidth={2.5}>
                     <animateMotion dur="1.4s" repeatCount="indefinite" keyPoints={l.key === hopKey[0] ? "0;1" : "1;0"} keyTimes="0;1" calcMode="linear">
                       <mpath href={`#edge-${l.key}`} />
@@ -329,11 +333,13 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
           {hopKey.length > 0 && !hasHopEdge && byId.get(previous!)?.x !== undefined && byId.get(active!)?.x !== undefined && (
             <g>
               <path id="edge-hop" d={curve(byId.get(previous!)!, byId.get(active!)!, 30).d} fill="none" stroke={TRAIL} strokeWidth={4} strokeDasharray="2 9" strokeLinecap="round" className="trail-dash" markerEnd="url(#arrow-trail)" />
-              <circle r={7} fill={TRAIL} style={{ stroke: OUTLINE }} strokeWidth={2.5}>
-                <animateMotion dur="1.4s" repeatCount="indefinite">
-                  <mpath href="#edge-hop" />
-                </animateMotion>
-              </circle>
+              {!still && (
+                <circle r={7} fill={TRAIL} style={{ stroke: OUTLINE }} strokeWidth={2.5}>
+                  <animateMotion dur="1.4s" repeatCount="indefinite">
+                    <mpath href="#edge-hop" />
+                  </animateMotion>
+                </circle>
+              )}
             </g>
           )}
 

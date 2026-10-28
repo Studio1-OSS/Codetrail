@@ -70,7 +70,7 @@ export function UserMenu() {
 
 export function SignInModal({ onClose }: { onClose: () => void }) {
   return (
-    <Dialog title="Sign in to start a new trail" onClose={onClose}>
+    <Dialog title="Sign in to read a new repo" onClose={onClose}>
       <p className="text-[14px] leading-relaxed text-fg-2">
         Reading a new repo or asking a question runs DeepSeek V4.1 Flash 1017 on our account. Sign in with GitHub for free daily reads and questions. Stored repos, tours and docs
         stay free without signing in.

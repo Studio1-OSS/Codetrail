@@ -1,9 +1,10 @@
 "use client";
 
-import { ExternalLink, FileCode2, GitCompareArrows } from "lucide-react";
+import { Check, Copy, ExternalLink, FileCode2, GitCompareArrows, Milestone, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lineRanges, patchLines } from "@/lib/diff";
 import { blobUrl, LOCAL_OWNER } from "@/lib/ref";
+import type { TourMark } from "@/server/trail/service";
 
 const LANG: Record<string, string> = {
   ts: "typescript", mts: "typescript", cts: "typescript", tsx: "tsx", js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "jsx",
@@ -25,8 +26,9 @@ function langOf(path: string): string {
 const rawUrl = (owner: string, repo: string, sha: string, path: string) =>
   owner === LOCAL_OWNER ? null : `https://raw.githubusercontent.com/${owner}/${repo}/${sha}/${path.split("/").map(encodeURIComponent).join("/")}`;
 
-// Highlighted files, kept across steps (most tours stay in a handful of files).
-const htmlCache = new Map<string, Promise<string>>();
+// Highlighted files (and their text, for copying), kept across steps: most tours stay in a handful of files.
+type Shown = { html: string; text: string };
+const htmlCache = new Map<string, Promise<Shown>>();
 
 async function shiki(text: string, lang: string): Promise<string> {
   const { codeToHtml } = await import("shiki");
@@ -37,12 +39,13 @@ async function shiki(text: string, lang: string): Promise<string> {
   }
 }
 
-async function highlight(url: string, fallback: string | null, path: string): Promise<string> {
+async function highlight(url: string, fallback: string | null, path: string): Promise<Shown> {
   // Codetrail's stored copy of the commit first (no GitHub limits), then GitHub's raw file.
   let res = await fetch(url).catch(() => null);
   if (!res?.ok && fallback) res = await fetch(fallback).catch(() => null);
   if (!res?.ok) throw new Error(`couldn't load the file (${res?.status ?? "offline"})`);
-  return shiki(await res.text(), langOf(path));
+  const text = await res.text();
+  return { html: await shiki(text, langOf(path)), text };
 }
 
 type Props = {
@@ -54,10 +57,28 @@ type Props = {
   end?: number;
   /** In a pull-request tour: this file's patch, so the lines it changed are marked (and the diff can be shown). */
   patch?: string;
+  /** Steps of stored tours in this file: marked in the gutter, like CodeTour's markers. */
+  marks?: TourMark[];
+  onMark?: (mark: TourMark) => void;
+  /** Opens this file in the call graph. */
+  onCalls?: () => void;
 };
 
-export function CodePanel({ owner, repo, sha, path, start, end, patch }: Props) {
+const MARKS_KEY = "codetrail:tour-marks";
+
+export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [], onMark, onCalls }: Props) {
   const [html, setHtml] = useState<string | null>(null);
+  const [text, setText] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"code" | "path" | null>(null);
+  const [showMarks, setShowMarks] = useState(() => {
+    try {
+      return typeof window === "undefined" || localStorage.getItem(MARKS_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  // Where each marked step sits, measured from the rendered lines.
+  const [placed, setPlaced] = useState<{ top: number; height: number; marks: TourMark[] }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [bar, setBar] = useState<{ top: number; height: number } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
@@ -75,12 +96,16 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch }: Props) 
     const key = diffView ? `diff:${sha}:${path}` : url;
     let p = htmlCache.get(key);
     if (!p) {
-      p = diffView ? shiki(patch!, "diff") : highlight(url, rawUrl(owner, repo, sha, path), path);
+      p = diffView ? shiki(patch!, "diff").then((h) => ({ html: h, text: patch! })) : highlight(url, rawUrl(owner, repo, sha, path), path);
       p.catch(() => htmlCache.delete(key));
       htmlCache.set(key, p);
     }
     setHtml(null);
-    p.then((h) => !cancelled && setHtml(h)).catch((e: Error) => !cancelled && setError(e.message));
+    p.then((h) => {
+      if (cancelled) return;
+      setHtml(h.html);
+      setText(h.text);
+    }).catch((e: Error) => !cancelled && setError(e.message));
     return () => {
       cancelled = true;
     };
@@ -123,6 +148,35 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch }: Props) 
     }
   }, [html, start, end, changes, diffView]);
 
+  // Tour markers: one per line where steps start, sized to the first step's range.
+  useEffect(() => {
+    const root = box.current;
+    if (!root || !html || diffView || !showMarks || !marks.length) return setPlaced([]);
+    const lines = root.querySelectorAll<HTMLElement>(".line");
+    const byLine = new Map<number, TourMark[]>();
+    for (const m of marks) if (m.start >= 1 && m.start <= lines.length) byLine.set(m.start, [...(byLine.get(m.start) ?? []), m]);
+    setPlaced(
+      [...byLine].map(([line, ms]) => {
+        const first = lines[line - 1];
+        const last = lines[Math.min(lines.length, ms[0].end) - 1] ?? first;
+        return { top: first.offsetTop, height: Math.max(first.offsetHeight, last.offsetTop + last.offsetHeight - first.offsetTop), marks: ms };
+      }),
+    );
+  }, [html, marks, diffView, showMarks]);
+
+  const copy = (what: "code" | "path") => {
+    const body =
+      what === "path"
+        ? `${path}${start ? `:${start}${end && end !== start ? `-${end}` : ""}` : ""}`
+        : start && end && text
+          ? text.split("\n").slice(start - 1, end).join("\n")
+          : (text ?? "");
+    navigator.clipboard?.writeText(body).then(() => {
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
   return (
     <div className="code-surface flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-line bg-code">
       <div className="flex items-center justify-between gap-2 border-b border-[#1d2026] px-3.5 py-2">
@@ -138,12 +192,42 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch }: Props) 
             </span>
           )}
         </div>
+        <span className="ml-auto flex shrink-0 items-center">
+          {marks.length > 0 && !diffView && (
+            <button
+              onClick={() => {
+                setShowMarks((v) => {
+                  try {
+                    localStorage.setItem(MARKS_KEY, v ? "off" : "on");
+                  } catch {}
+                  return !v;
+                });
+              }}
+              aria-pressed={showMarks}
+              title={`${showMarks ? "Hide" : "Show"} where tours stop in this file (${marks.length} ${marks.length === 1 ? "step" : "steps"})`}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showMarks ? "text-trail" : "text-[#7a7d86] hover:text-[#eeece6]"}`}
+            >
+              <Milestone className="size-3" /> {marks.length}
+            </button>
+          )}
+          {onCalls && (
+            <button onClick={onCalls} title="Show the functions in this file and what they call" className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6]">
+              <Workflow className="size-3" /> calls
+            </button>
+          )}
+          <button onClick={() => copy("code")} title={start && end ? `Copy lines ${start}–${end}` : "Copy the whole file"} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6]">
+            {copied === "code" ? <Check className="size-3 text-ok" /> : <Copy className="size-3" />} {copied === "code" ? "copied" : "copy"}
+          </button>
+          <button onClick={() => copy("path")} title="Copy the path and line range" className="hidden items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6] sm:inline-flex">
+            {copied === "path" ? "copied" : "path"}
+          </button>
+        </span>
         {changes && (
           <button
             onClick={() => setShowDiff((d) => !d)}
             aria-pressed={showDiff}
             title={showDiff ? "Show the file as the PR leaves it" : "Show this file's diff"}
-            className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showDiff ? "text-[#eeece6]" : "text-[#7a7d86] hover:text-[#eeece6]"}`}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showDiff ? "text-[#eeece6]" : "text-[#7a7d86] hover:text-[#eeece6]"}`}
           >
             <GitCompareArrows className="size-3" /> {showDiff ? "file" : "diff"}
           </button>
@@ -170,7 +254,22 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch }: Props) 
           {error ? (
             <p className="p-4 text-sm text-danger">Couldn&apos;t load this file ({error}).</p>
           ) : inner ? (
-            <div dangerouslySetInnerHTML={inner} />
+            <>
+              <div dangerouslySetInnerHTML={inner} />
+              {placed.map((p) => (
+                <button
+                  key={p.top}
+                  onClick={() => onMark?.(p.marks[0])}
+                  title={p.marks.map((m) => `Tour: ${m.tourTitle} · step ${m.step + 1}: ${m.title}`).join("\n")}
+                  aria-label={`Tour stop: ${p.marks.map((m) => `${m.tourTitle}, step ${m.step + 1}`).join("; ")}. Opens the tour there.`}
+                  className="group absolute left-0 w-2.5"
+                  style={{ top: p.top, height: p.height }}
+                >
+                  <span className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-trail/70 group-hover:bg-trail" />
+                  {p.marks.length > 1 && <span className="absolute top-0 left-[5px] font-mono text-[9px] leading-none text-trail">{p.marks.length}</span>}
+                </button>
+              ))}
+            </>
           ) : (
             <div className="space-y-2 p-4">
               {Array.from({ length: 14 }, (_, i) => (

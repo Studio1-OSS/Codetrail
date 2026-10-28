@@ -29,7 +29,7 @@ export default async function DataPage() {
       <SiteHeader />
       <main className="mx-auto max-w-[1240px] px-4 pt-10 pb-20 sm:px-6">
         <h1 className="font-display text-[40px] leading-none font-light tracking-[-0.05em] [font-stretch:78%] sm:text-[56px]">
-          Trails <span className="font-extrabold text-trail [font-stretch:110%]">walked.</span>
+          Repos <span className="font-extrabold text-trail [font-stretch:110%]">read.</span>
         </h1>
         <p className="mt-3 max-w-xl text-[15px] text-fg-2">Every repo read on this Codetrail instance, what it cost, and what cached input saved.</p>
 
@@ -63,7 +63,13 @@ export default async function DataPage() {
               </span>
             </div>
             {sorted.length === 0 ? (
-              <p className="mt-6 text-sm text-fg-3">Nothing traced yet.</p>
+              <p className="mt-6 text-sm text-fg-3">
+                Nothing read yet. Paste a repo on the{" "}
+                <Link href="/" className="text-trail hover:underline">
+                  home page
+                </Link>{" "}
+                to start.
+              </p>
             ) : (
               <ul className="mt-5 space-y-5">
                 {sorted.map((r) => (
@@ -94,7 +100,7 @@ export default async function DataPage() {
             <dl className="mt-4">
               {[
                 ["Repos read", String(totals?.reads ?? 0)],
-                ["Tours traced", String(totals?.tours ?? 0)],
+                ["Tours, answers and docs written", String(totals?.tours ?? 0)],
                 ["Tours replayed free", String(totals?.replays ?? 0)],
                 ["Tokens read", formatTokens(totals?.inputTokens ?? 0)],
                 ["Of those, cached", `${formatTokens(totals?.cachedTokens ?? 0)}`],
@@ -110,9 +116,10 @@ export default async function DataPage() {
           </section>
         </div>
 
+        {sorted.length > 0 && (
         <section aria-labelledby="table" className="mt-14">
           <h2 id="table" className="font-medium">
-            Traced repos
+            Repos read
           </h2>
           <div className="relative mt-3 overflow-x-auto">
             <table className="w-full min-w-[860px] border-collapse text-[14px]">
@@ -159,6 +166,7 @@ export default async function DataPage() {
             </table>
           </div>
         </section>
+        )}
       </main>
     </div>
   );

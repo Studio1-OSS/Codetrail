@@ -21,6 +21,13 @@ export async function putJSON(key: string, value: unknown): Promise<void> {
     .onConflictDoUpdate({ target: schema.artifacts.key, set: { value: v, updatedAt: new Date() } });
 }
 
+/** Keys matching a SQL LIKE pattern, with when each was last written: e.g. every stored map. */
+export async function keysLike(pattern: string): Promise<{ key: string; at: number }[]> {
+  await dbReady();
+  const rows = await db.select({ key: schema.artifacts.key, at: schema.artifacts.updatedAt }).from(schema.artifacts).where(sql`${schema.artifacts.key} LIKE ${pattern}`);
+  return rows.map((r) => ({ key: r.key, at: r.at instanceof Date ? r.at.getTime() : Number(r.at) }));
+}
+
 // --- A commit's files ---------------------------------------------------------------------------------------
 type SnapshotMeta = Pick<Snapshot, "images" | "skipped"> & { files: number };
 

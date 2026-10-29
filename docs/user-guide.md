@@ -2,6 +2,7 @@
 
 How to run Codetrail on your machine and use every part of it. For what it is and how it works, see the [README](../README.md).
 
+- [Ways to use it](#ways-to-use-it)
 - [1. Set it up](#1-set-it-up)
 - [2. Open a repo](#2-open-a-repo)
 - [3. Read it](#3-read-it)
@@ -17,6 +18,23 @@ How to run Codetrail on your machine and use every part of it. For what it is an
 - [13. Coding agents (MCP)](#13-coding-agents-mcp)
 - [14. Keyboard shortcuts](#14-keyboard-shortcuts)
 - [15. Troubleshooting](#15-troubleshooting)
+
+## Ways to use it
+
+| You want to… | Do this |
+| --- | --- |
+| **Get to know a new codebase** | Read it once, then play the main tour. Open the modules that matter on the [map](#4-the-map), and write the [docs](#7-docs) for a page per module. |
+| **Find where something happens before you change it** | [Ask](#6-ask-questions) "where is X handled?", open the file's **Calls** view to see what calls it, and click a link on the map for the imports behind it. |
+| **Review a pull request** | Open the PR's link. The [PR tour](#9-pull-requests) walks through the change in the order it runs, with the diff and notes on risks and missing tests. |
+| **Onboard a teammate** | [Write a tour](#5-tours) of the parts they need, or edit a generated one, and send them the link. Export it to `.tours/` so it lives in the repo for VS Code CodeTour. |
+| **Document a project** | Write the docs, export them as Markdown, and [embed](#4-the-map) the live architecture image and badge in the README. |
+| **Settle a hard question** | Ask it in [Research](#6-ask-questions) mode: DeepSeek plans what to find out, looks in up to three rounds, then answers with checked references. |
+| **Hand context to an AI chat** | **Copy as a prompt** (on a module, a tour, an answer, or the map's Export menu) gives the architecture and the code references, ready to paste. |
+| **Present a codebase** | Open the [slides](#7-docs): the architecture, every module and the main tour, with keys and full screen, or downloaded as one HTML file. |
+| **Keep tours useful as the code changes** | Read the newer commit. Every tour [comes along](#5-tours), its steps moved with their code and any changed step flagged. |
+| **Give a coding agent context** | Connect the [MCP server](#13-coding-agents-mcp), or point the agent at `/owner/repo.md`, so it starts from the map and checked `file:line` references instead of searching. |
+| **Work in a big monorepo** | **Choose folders** on the [Ready screen](#3-read-it) to read only the part you work on. |
+| **Look at code that isn't on GitHub** | Self-host and open [your own folders](#10-your-own-folders), unpushed changes included. |
 
 ## 1. Set it up
 
@@ -93,9 +111,15 @@ The middle of the screen is the map. It has four views:
 - **Files**: the real import graph, file by file, grouped by module.
 - **Calls**: one file's functions, what each one calls and who calls them, worked out from the code (no model call). Type a file name to pick another, or press **calls** in the code panel's header. Click a function to open it. JavaScript and TypeScript are read with the TypeScript compiler, so imports and aliases resolve exactly; Python and Go are matched by name to the files they import. Calls into libraries are counted, not drawn.
 
-**Double-click a module** on the Architecture view (or press **Show its files on the map** in its panel) to open it into its files, with the imports between them; links to other modules then start at the file that has the import. Double-click again, or **Close opened modules**, to fold it back. Opened modules stay in the address (`?open=core,router`).
+**Double-click a module** on the Architecture view (or select it and press `O`, or press **Show its files on the map** in its panel) to open it into its files, with the imports between them; links to other modules then start at the file that has the import. Double-click again, or **Close opened modules**, to fold it back. Opened modules stay in the address (`?open=core,router`).
 
-**Click a link** to see the evidence for it: every import line in the code that backs it, each opening at that line, with the module's own files first. A dashed link says the model inferred it, with nothing in the imports behind it.
+**Click a link** to see the evidence for it: every import line in the code that backs it, each opening at that line, with the module's own files first. A dashed link says the model inferred it, with nothing in the imports behind it. A module's panel lists its links too, each opening the same evidence, and on a selected box `[` and `]` step through them.
+
+**Find** (under the map, or press `F`) lights up the modules and files whose name matches, and on the Calls view the functions. Press Enter to go to the next match; a file inside a closed module opens it.
+
+**List** (beside the view tabs) shows the current view as text: the layers and modules with their links (each opening its evidence), the files of opened modules, each file's imports on the Files view, and each function's callers and calls on the Calls view. It's the same map for screen readers, or for reading top to bottom.
+
+**With the keyboard**: Tab moves through the boxes from top to bottom, Enter selects one, `O` opens or closes a module, and `[` `]` step through its links. With the map itself focused, `+` and `−` zoom, `0` fits it, and the arrow keys pan.
 
 Click a box or node to see what the module does and its key files (and, once the docs are written, a link to its docs page). Zoom with the buttons or your trackpad. During a tour, the current step's box is highlighted, each visited box shows its step numbers, and the route between steps is drawn.
 
@@ -104,7 +128,9 @@ Click a box or node to see what the module does and its key files (and, once the
 - **Copy as Mermaid**: the architecture as a Mermaid flowchart. Layers become subgraphs, colours are kept, and each box links to its folder on GitHub at the commit read.
 - **Download SVG** and **Download PNG**: the whole diagram on the Architecture view (the visible part on the others), PNG at twice the size.
 - **Download for draw.io**: an editable draw.io file with the layers, boxes and links as laid out.
-- **Embed in a README**: copies Markdown for a live diagram image (`/owner/repo/diagram.svg`, light, or `?theme=dark`) and an "Explore with Codetrail" badge, both linking to the repo's page. The image updates when the repo is read again. It uses the instance's `SITE_URL`, so set that to a public address first.
+- **Copy as a prompt for an AI chat**: the repo, the commit and the architecture as Mermaid, ready to paste into any chat, with "cite file:line" at the end.
+- **Embed in a README (SVG)**: copies Markdown for a live diagram image (`/owner/repo/diagram.svg`, light, or `?theme=dark`) and an "Explore with Codetrail" badge, both linking to the repo's page. The image updates when the repo is read again. It uses the instance's `SITE_URL`, so set that to a public address first.
+- **Embed in a README (PNG)**: the same as a 1200×630 card (`/owner/repo/diagram.png`), for places that don't show SVG. It's also the repo page's link preview.
 - **Markdown for AI tools**: the repo's page at `/owner/repo.md` (see [Sharing](#12-sharing)).
 
 Repos read before layers were added are grouped by kind (entry, core, data…) instead. **Group into layers** under the diagram names the layers with one small call that sends only the module list, not the repo (about $0.002), and saves them with the map.
@@ -122,13 +148,20 @@ A tour walks through the code in the order it runs, one step at a time. The left
   - **Read as text** (or `T`): the whole tour with its code, copyable as Markdown with the code included.
   - **Share card**: the image shown as the link preview.
   - **Copy as Mermaid sequence diagram**.
-  - **Export for VS Code CodeTour**: a `.tour` file pinned to the commit, each step selecting its whole line range.
-- If the repo has its own CodeTour files (`.tours/*.tour`), they're listed under **Written by the maintainers**, checked the same way.
+  - **Copy as a prompt for an AI chat**: the architecture and every step with its `file:lines`.
+  - **Export for VS Code CodeTour**: a `.tour` file pinned to the commit, each step selecting its whole line range, with the next tour named so CodeTour offers it at the end.
+- If the repo has its own CodeTour files (in `.tours`, `.github/tours` or `.vscode/tours`, subfolders included, or `main.tour`), they're listed under **Written by the maintainers** in CodeTour's order, checked the same way. Steps that point at a folder or carry text only come along as text steps. The first time you open such a repo, a note says how many there are and which one to start with.
+- **Links in a step's text**: `[#3]` jumps to step 3, `[Tour title#2]` (or `[Tour title]`) opens another tour, and a backticked path such as `` `src/app.ts:12` `` opens that file. Code blocks and `>> command` lines get a copy button. This is CodeTour's own syntax, so tours written for it work here too.
+- **Previous tour**: the first step offers the stored tour before this one, so a series of tours reads both ways.
 - **Tour markers in the code**: wherever a stored tour stops in the file you're reading, a thin amber mark sits in the code panel's margin. Hover it for the tour and step; click it to open that tour there. The flag button in the code panel's header (with the count) hides or shows them.
-- **Progress**: the sidebar shows how much of each tour you've seen ("4/9 seen", "✓ seen"), and the step bar marks the steps you've visited. It's kept in your browser only.
+- **Progress**: the sidebar shows how much of each tour you've seen ("4/9 seen", "✓ seen"), and the step bar marks the steps you've visited. It's kept in your browser only; **Reset progress** clears it.
 - **Next tour**: the last step offers the next suggested tour you haven't finished, free when it's already stored (with its price when it isn't).
 
-**Write your own tour.** **+ Write a tour** in the sidebar, or **Edit a copy of this tour** in the Share & export menu, turns the step column into an editor. Give it a title, then add steps: open any file (press `/`) or step, and **Add the lines on screen as a step** takes what the code panel shows; adjust the lines, give the step a title and say what happens there. Steps can be moved, shown and deleted. **Save the tour** is free: each step is checked against the code (the file must be in the commit and the lines must exist), and the tour is listed under **Your tours**, with markers, progress, a link and CodeTour export like any other. On a hosted instance it needs sign-in.
+**Tours that follow the code.** When a newer commit of a repo is read, every tour of the earlier read comes along, free: each step is looked for again by the line it quotes, and moves with its code. A step whose line is gone stays where it was, marked **code changed**, and the tour's first step says how many moved and how many changed. For repos read before this was added, **Bring tours from the read at …** in the sidebar does the same.
+
+**Open a tour from a link.** **Open a tour from a link** under the Tours heading takes a `.tour` file on GitHub (a file or raw link) or a raw gist link. Its steps are checked against this commit and it's saved under **Your tours**. Free.
+
+**Write your own tour.** **+ Write a tour** in the sidebar, or **Edit a copy of this tour** in the Share & export menu, turns the step column into an editor. Give it a title, then add steps: open any file (press `/`) or step, and **Add the lines on screen as a step** takes what the code panel shows; adjust the lines, give the step a title and say what happens there. **Add a text step** writes one with no code, for an intro or a summary. Steps can be moved, shown and deleted. **Save the tour** is free: each step is checked against the code (the file must be in the commit and the lines must exist), and the tour is listed under **Your tours**, with markers, progress, a link and CodeTour export like any other. On a hosted instance it needs sign-in.
 
 ## 6. Ask questions
 
@@ -139,16 +172,19 @@ Type a question in **Ask how something works**, at the bottom of the sidebar.
   - **Answer**: a short structured answer with tables, file lists, call sequences and code references, each checked against the code.
   - **Tour**: a step-by-step walk. "Walk me through…" and "what happens when…" pick this.
   - **Thorough**: a slower, more thorough answer that traces across every file involved. It costs more.
+  - **Research**: for questions one pass can't settle. DeepSeek first plans what to find out, then looks in up to three rounds (each sees what the earlier ones found, and it stops early when there's nothing new), then writes the answer with every reference checked. You see each stage as it runs; afterwards the plan and each round stay openable under the answer. It's a few calls on the cached repo, so it costs a few answers, and its price shows before you ask. It answers new questions, not follow-ups.
 - **The price** for that kind of question is shown under the box before you ask: what it costs if the repo is in the cache, and the most it can cost.
 - **Stop** ends a question, tour, docs or read you no longer want. If no one else is waiting on the same call, DeepSeek stops writing; whatever it had already read may still be billed. A stopped or failed question goes back into the box, with **Start again** or **Retry** next to the message.
 
-**Follow-ups.** Under every answer and repo tour there are suggested follow-up questions (each with its price) and an **Ask a follow-up** box. Pull-request tours don't take follow-ups: the model would see the repo before the change, not the PR's code. A follow-up gets a short recap of the conversation, so the answer builds on what was already said. The conversation's questions appear as numbered pills, so you can go back to any of them. Conversations are listed in the sidebar and have their own link.
+**Follow-ups.** Under every answer, **Copy as a prompt** gives the answer with the architecture, ready for any AI chat. Under every answer and repo tour there are suggested follow-up questions (each with its price) and an **Ask a follow-up** box. Pull-request tours don't take follow-ups: the model would see the repo before the change, not the PR's code. A follow-up gets a short recap of the conversation, so the answer builds on what was already said. A follow-up already asked from the same answer or tour (a suggested one, say) replays free, like any stored question. The conversation's questions appear as numbered pills, so you can go back to any of them. Conversations are listed in the sidebar and have their own link.
 
 ## 7. Docs
 
 **Write the docs** in the sidebar writes one page for each module in a single call: an overview, how it works, key files and where to look, with every reference checked. After that, **Read the docs** is free.
 
 Each page has a diagram of its module: its files and the imports between them, and the modules it links to. Click a file to open it, or a neighbouring module to go to its page. Open a page from the module's panel on the map (**Open its docs page**) or from the list at the top.
+
+**Slides** (at the top of the docs, or `/owner/repo/slides`) turn what's stored into a deck: a title slide, the architecture, one slide per module (its overview, its diagram and key files) and the main tour's steps. They need no model call, so they're free and instant. Use `←` `→` or Space to move, `F` for full screen; the slide number stays in the link. **Download as HTML** saves them as one file that works anywhere, with the same keys.
 
 Export **This page** or **All** as Markdown (each page's diagram included as Mermaid), or all of it as **.json**. Under each answer, **Copy as Markdown** and **Download .md** give the answer with its tables, file lists, call sequences (also as Mermaid) and the lines of every checked code reference, linked at the commit.
 
@@ -162,7 +198,7 @@ The code panel's header has **copy** (the highlighted lines, or the whole file),
 
 Open a PR with its link, `owner/repo#123`, or the **Tour a PR** box in the sidebar. The repo needs to be read once first, and the PR page offers that if it hasn't been.
 
-- **Before you pay**, the PR page shows the title, author, size and state, how much will be sent (the patches and the PR's version of each changed file), and the estimate. Because DeepSeek already has the repo, only the change is new input.
+- **Before anything is spent**, the PR page shows the title, author, size and state, how much will be sent (the patches and the PR's version of each changed file), and the estimate. Because DeepSeek already has the repo, only the change is new input.
 - **Tour this PR** walks through the change in the order it runs:
   - Changed lines are marked in the code: green for added, a red rule where lines were removed.
   - **diff** shows the patch.
@@ -182,7 +218,7 @@ Useful for code that isn't on GitHub yet, a branch you haven't pushed, or a clie
 
 ## 12. Sharing
 
-Everything has a link: a tour step (`?tour=…&step=…`), an answer (`?answer=…`), a conversation (`?thread=…&turn=…`), a docs page (`?doc=<module>`), an open file (`?file=<path>&line=<n>`) and a PR (`/owner/repo/pull/123`). The browser's Back and Forward move between what you opened. Links show a share card as their preview image. Anyone opening a link on the same instance replays it free.
+Everything has a link: a tour step (`?tour=…&step=…`), an answer (`?answer=…`), a conversation (`?thread=…&turn=…`), a docs page (`?doc=<module>`), an open file (`?file=<path>&line=<n>`) and a PR (`/owner/repo/pull/123`). The browser's Back and Forward move between what you opened. A tour's link shows its share card as the preview image; the repo's own link shows its architecture diagram. Anyone opening a link on the same instance replays it free.
 
 **Browse** (in the site header) lists every repo read on your instance, with search and sorting by newest, stars or name.
 
@@ -190,16 +226,27 @@ Everything has a link: a tour step (`?tour=…&step=…`), an answer (`?answer=�
 
 ## 13. Coding agents (MCP)
 
-Codetrail is also an MCP server, so Claude Code, Cursor and other agents can use it as a tool. It helps when an agent works in code it doesn't know: instead of searching file by file, it gets the module map (with its layers and a Mermaid diagram), a tour or an answer with exact `file:line` references, and it can ask follow-ups in the same thread. For reviews, `codetrail_pr` gives it the change in the order it runs, with notes. Local folders work too: use `_local/<folder>` as the repo. It offers four tools:
+Codetrail is also an MCP server, so Claude Code, Cursor and other agents can use it as a tool. It helps when an agent works in code it doesn't know: instead of searching file by file, it gets the module map (with its layers and a Mermaid diagram), a tour or an answer with exact `file:line` references, and it can ask follow-ups in the same thread. For reviews, `codetrail_pr` gives it the change in the order it runs, with notes. Local folders work too: use `_local/<folder>` as the repo. It offers six tools:
 
 | Tool | What the agent gets |
 | --- | --- |
 | `codetrail_map(repo)` | The modules with their layers and key files, how they connect, the architecture as Mermaid, and suggested questions |
 | `codetrail_tour(repo, question)` | Ordered steps with `path:Lx-Ly` and a link to each |
-| `codetrail_ask(repo, question, thread?, thorough?)` | A short answer with checked code references, follow-up questions and a thread id for follow-ups |
+| `codetrail_ask(repo, question, thread?, thorough?, research?)` | A short answer with checked code references, follow-up questions and a thread id for follow-ups. `research` plans and looks in rounds first |
 | `codetrail_pr(repo, number)` | A reviewer's tour of a pull request with review notes (`repo` can be the PR's URL) |
+| `codetrail_docs(repo, module?)` | The stored docs, or one module's page. Free |
+| `codetrail_search(query, repo?)` | Files of a read that contain the query, with the matching lines; without a repo, the repos already read. Free |
 
-**Claude Code**, with the app running (Docker or `pnpm dev`):
+**Claude Code plugin.** The repo is a plugin marketplace. The plugin adds the MCP server and a skill that tells Claude when to use each tool:
+
+```bash
+claude plugin marketplace add Studio1-OSS/Codetrail
+claude plugin install codetrail@codetrail
+```
+
+It connects to `http://localhost:3000/api/mcp`; set `CODETRAIL_MCP_URL` to use another address.
+
+**Claude Code** without the plugin, with the app running (Docker or `pnpm dev`):
 
 ```bash
 claude mcp add --transport http codetrail http://localhost:3000/api/mcp
@@ -211,7 +258,7 @@ Or without the app running, straight from the source folder:
 claude mcp add codetrail -- pnpm --dir /path/to/Codetrail -s mcp
 ```
 
-**Cursor** (`.cursor/mcp.json`):
+**VS Code**: [install in VS Code](https://insiders.vscode.dev/redirect/mcp/install?name=codetrail&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fmcp%22%7D). **Cursor**: [install in Cursor](https://cursor.com/install-mcp?name=codetrail&config=eyJ1cmwiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAvYXBpL21jcCJ9), or add it to `.cursor/mcp.json`:
 
 ```json
 { "mcpServers": { "codetrail": { "url": "http://localhost:3000/api/mcp" } } }
@@ -226,12 +273,17 @@ Then ask your agent things like "use codetrail to map lukeed/polka" or "use code
 | `←` `→` | Previous / next step |
 | `Space` | Play or pause the tour |
 | `/` | Browse and search files |
-| `Tab`, then `Enter` | Move through the map's nodes and open one |
+| `F` | Find a module, file or function on the map |
 | `T` | Read the tour as text |
 | `?` | Show the shortcuts |
-| `Esc` | Close a dialog, the docs, or an open module or file |
+| `Esc` | Close a dialog, a menu, the docs, or an open module, file or link |
+| `Tab`, then `Enter` | Move through the map's boxes and select one |
+| `O` | Open the focused module into its files, or close it |
+| `[` `]` | Step through the selected box's links and their imports |
+| `+` `−` `0` | Zoom the map in, out, or to fit (with the map focused) |
+| Arrow keys | Pan the map (with the map itself focused) |
 
-Shortcuts don't fire while you type, while a dialog is open, or for a key the focused control uses itself (Space on a button).
+Shortcuts don't fire while you type, while a dialog is open, or for a key the focused control uses itself (Space on a button). Single-key shortcuts (`/`, `?`, `T`, `F`) can be switched off in the shortcuts dialog (`?`), for speech input. On the slides, `←` `→`, Space, Home, End and `F` (full screen) work the same way.
 
 ## 15. Troubleshooting
 

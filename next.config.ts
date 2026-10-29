@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   // The call graph parses JS/TS with the TypeScript compiler on the server; it stays a plain Node package.
   serverExternalPackages: ["typescript"],
   // The database migrations are read at runtime on first use.
-  outputFileTracingIncludes: { "/**": ["./drizzle/**"] },
+  outputFileTracingIncludes: { "/**": ["./drizzle/**"], "/guide": ["./docs/user-guide.md"] },
   // The data page used to live at /dashboard.
   async redirects() {
     return [{ source: "/dashboard", destination: "/data", permanent: true }];

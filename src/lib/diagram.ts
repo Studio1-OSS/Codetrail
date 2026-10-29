@@ -29,6 +29,8 @@ export type Placed = { id: string; x: number; y: number; w: number; h: number; b
 export type PlacedGroup = { id: string; x: number; y: number; w: number; h: number; title: string; color: string };
 export type Route = { key: string; from: string; to: string; label: string; verified: boolean; evidence: Evidence[]; points: Point[] };
 export type Layout = { boxes: Map<string, Placed>; groups: PlacedGroup[]; routes: Route[]; w: number; h: number };
+/** A link as the evidence panel shows it, from the map or from a list. */
+export type LinkInfo = Pick<Route, "from" | "to" | "label" | "verified" | "evidence">;
 
 const GROUP_TOP = 34;
 export const COMPOUND_TOP = 46;
@@ -170,7 +172,7 @@ export async function layoutDiagram(spec: DiagramSpec): Promise<Layout> {
 
 // --- What to draw ---------------------------------------------------------------------------------------
 
-type Files = Pick<RepoSummary, "fileSizes" | "imports" | "importLines">;
+export type Files = Pick<RepoSummary, "fileSizes" | "imports" | "importLines">;
 const MAX_FILES = 10;
 
 /** File-level imports with their module on each end, from the summary's import graph. */

@@ -6,6 +6,8 @@
     "scripts/check-gating.mts",
     "scripts/eval.mts",
     "scripts/nebius-smoke.mts",
-    "scripts/record-demo.mts"
+    "scripts/record-demo.mts",
+    "scripts/a11y.mts",
+    "scripts/screenshots.mts"
   ]
 }

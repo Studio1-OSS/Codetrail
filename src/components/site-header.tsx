@@ -17,6 +17,9 @@ export function SiteHeader({ overlay }: { overlay?: boolean }) {
         <Link href="/#faq" className="text-fg-2 hover:text-fg">
           FAQ
         </Link>
+        <Link href="/guide" className="text-fg-2 hover:text-fg">
+          Guide
+        </Link>
         <Link href="/browse" className="text-fg-2 hover:text-fg">
           Browse
         </Link>

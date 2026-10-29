@@ -2,11 +2,11 @@
 // Everything is pinned to a commit and stored, so a repository someone already traced costs nothing to open.
 import { createHash, randomUUID } from "node:crypto";
 import { env, MODEL_LABEL } from "@/env";
-import { atlasJsonSchema, atlasSchema, tourJsonSchema, tourSchema, type Atlas, type CallRecord, type RepoSummary, type Tour, type TourAnswer, type TourIndexEntry } from "@/lib/schemas";
+import { atlasJsonSchema, atlasSchema, onCode, tourJsonSchema, tourSchema, type Atlas, type CallRecord, type RepoSummary, type Step, type Tour, type TourAnswer, type TourIndexEntry } from "@/lib/schemas";
 import { getPrices, modelPrice, nebius } from "@/server/ai/client";
 import { AIError, chatJSON, type CallUsage, type Message, type StreamHooks } from "@/server/ai/nebius";
 import { costOf } from "@/server/ai/pricing";
-import { commitsAhead, downloadSnapshot, getRepoInfo, type RepoInfo, type Snapshot } from "@/server/repo/github";
+import { commitsAhead, downloadSnapshot, getRepoInfo, RepoError, type RepoInfo, type Snapshot } from "@/server/repo/github";
 import { localInfo, readLocal } from "@/server/repo/local";
 import { buildImportGraph, summarizeGraph, type ImportGraph } from "@/server/repo/graph";
 import { estimateTokens, packRepo, type Pack } from "@/server/repo/pack";
@@ -15,10 +15,11 @@ import { appendCall, fileFromStore, getCalls, getJSON, keysLike, loadSnapshot, p
 import { recordCall, spentToday } from "@/server/stats";
 import { AuthRequiredError, takeQuota, type QuotaKind } from "@/server/quota";
 import { savedBy } from "@/lib/cache";
-import { inScope, parseScope, scopeHash, scopeString } from "@/lib/scope";
+import { inScope, parseScope, scopeHash, scopeLabel, scopeString } from "@/lib/scope";
 import { shared } from "@/server/inflight";
 
 export { shared };
+import { carryTour } from "./carry";
 import { groundSteps, nodeForFile, resolvePath } from "./ground";
 import { ATLAS_TASK, repoPrefix, tourTask } from "./prompts";
 
@@ -99,6 +100,7 @@ async function build(info: RepoInfo): Promise<Prepared> {
     // The scoped read's own facts, so lists can link back to it with its folders.
     if (!(await getJSON<RepoInfo>(`${base(info)}/info.json`))) await putJSON(`${base(info)}/info.json`, { ...full, ref: /^[0-9a-f]{40}$/i.test(full.ref) ? full.defaultBranch : full.ref, scope: info.scope });
     const out = snapshot.files.filter((f) => !inScope(f.path, scope));
+    if (!snapshot.files.some((f) => inScope(f.path, scope))) throw new RepoError(`No files in this commit match the chosen folders (${scopeLabel(scope)}).`, 400);
     snapshot = {
       files: snapshot.files.filter((f) => inScope(f.path, scope)),
       images: snapshot.images.filter((i) => inScope(i.path, scope)),
@@ -275,7 +277,7 @@ export async function tourMarks(info: Pick<RepoInfo, "owner" | "repo" | "sha" | 
   const hit = marksCache.get(base(info));
   if (hit?.key === key) return hit.marks;
   const tours = await Promise.all(index.map((t) => getStoredTour(info as RepoInfo, t.id)));
-  const marks = tours.flatMap((t) => (t ? t.steps.map((s, i) => ({ tourId: t.id, tourTitle: t.title, step: i, title: s.title, file: s.file, start: s.startLine, end: s.endLine })) : []));
+  const marks = tours.flatMap((t) => (t ? t.steps.flatMap((s, i) => (onCode(s) && !s.stale ? [{ tourId: t.id, tourTitle: t.title, step: i, title: s.title, file: s.file, start: s.startLine, end: s.endLine }] : [])) : []));
   remember(marksCache, base(info), { key, marks }, 50);
   return marks;
 }
@@ -317,6 +319,7 @@ async function readAtlas(p: Prepared, who: string, stream?: StreamHooks): Promis
   await appendLedger(p.info, record);
   await addRecent(p.info);
   await importCodeTours(p, atlas).catch((e) => console.error("CodeTour import failed", e));
+  await carryTours(p, atlas).catch((e) => console.error("Carrying tours failed", e));
   return { atlas, fromCache: false };
 }
 
@@ -430,6 +433,9 @@ async function saveTour(p: Prepared, atlas: Atlas, question: string, answer: Tou
 type RecentRepo = { owner: string; repo: string; description: string | null; stars: number; at: number; sha?: string; private?: boolean; scope?: string };
 
 export const getRecent = () => getJSON<RecentRepo[]>("recent.json").then((r) => r ?? []);
+/** One entry per repo (its newest read), for lists that link by repo name: a folder-scoped read shares the repo's link. */
+export const newestPerRepo = (list: RecentRepo[]) =>
+  list.filter((r, i) => list.findIndex((x) => `${x.owner}/${x.repo}`.toLowerCase() === `${r.owner}/${r.repo}`.toLowerCase()) === i);
 
 async function addRecent(info: RepoInfo) {
   const list = await getRecent();
@@ -460,11 +466,13 @@ export function getFeatured(): Promise<Featured | null> {
       if (!first) continue;
       const tour = await getJSON<Tour>(`${base(info)}/tours/${first.id}.json`);
       if (!tour) continue;
-      const stepFiles = [...new Set(tour.steps.map((s) => s.file))];
+      const steps = tour.steps.filter(onCode);
+      if (!steps.length) continue;
+      const stepFiles = [...new Set(steps.map((s) => s.file))];
       const texts = await Promise.all(stepFiles.map((f) => fileFromStore(base(info), f)));
       const lines = texts.flatMap((t) => t?.split("\n") ?? []).map((l) => l.replace(/\t/g, "  ").slice(0, 90));
       if (lines.length < 20) continue;
-      const pick = [0, 0.25, 0.5, 0.75, 1].map((p) => tour.steps[Math.round(p * (tour.steps.length - 1))]);
+      const pick = [0, 0.25, 0.5, 0.75, 1].map((p) => steps[Math.round(p * (steps.length - 1))]);
       return {
         owner: r.owner,
         repo: r.repo,
@@ -486,6 +494,7 @@ type RepoSpend = {
   repo: string;
   description: string | null;
   sha: string;
+  scope?: string;
   calls: number;
   input: number;
   cached: number;
@@ -500,8 +509,8 @@ type RepoSpend = {
 export async function getRepoSpend(): Promise<RepoSpend[]> {
   const price = await modelPrice();
   const out: RepoSpend[] = [];
-  for (const r of await getRecent()) {
-    if (!r.sha) continue;
+  // Every read on this instance (not just the recent list), so nothing drops off the page.
+  for (const r of await listReads()) {
     const info = { owner: r.owner, repo: r.repo, sha: r.sha, scope: r.scope };
     const [ledger, tours] = await Promise.all([getCalls(base(info)), getJSON<TourIndexEntry[]>(`${base(info)}/tours.json`)]);
     const l = ledger ?? [];
@@ -512,6 +521,7 @@ export async function getRepoSpend(): Promise<RepoSpend[]> {
       repo: r.repo,
       description: r.description,
       sha: r.sha,
+      ...(r.scope ? { scope: r.scope } : {}),
       calls: l.length,
       input,
       cached,
@@ -526,61 +536,144 @@ export async function getRepoSpend(): Promise<RepoSpend[]> {
 }
 
 // --- CodeTour files written by the maintainers ------------------------------------------------------------
-type CodeTourFile = { title?: string; description?: string; steps?: { file?: string; line?: number; title?: string; description?: string; selection?: { start?: { line?: number }; end?: { line?: number } } }[] };
+type CodeTourStep = { file?: string; directory?: string; line?: number; pattern?: string; title?: string; description?: string; selection?: { start?: { line?: number }; end?: { line?: number } } };
+export type CodeTourFile = { title?: string; description?: string; isPrimary?: boolean; steps?: CodeTourStep[] };
+
+/** Where CodeTour looks for tours: .tours, .github/tours and .vscode/tours (with subfolders), and main.tour. */
+export const CODETOUR_PATH = /^(?:(?:.*\/)?(?:\.tours|\.github\/tours|\.vscode\/tours)\/.+\.tour|main\.tour)$/;
+
+/** CodeTour's own order: the primary tour first, then by title, numbers in titles ("1 - Intro") counted as numbers. */
+export function orderCodeTours<T extends { path: string; tour: CodeTourFile }>(tours: T[]): T[] {
+  const primary = (t: T) => (t.tour.isPrimary || t.path === "main.tour" ? 0 : 1);
+  const title = (t: T) => t.tour.title ?? t.path;
+  return [...tours].sort((a, b) => primary(a) - primary(b) || title(a).localeCompare(title(b), "en", { numeric: true }));
+}
+
+const safeTest = (pattern: string, line: string) => {
+  try {
+    return new RegExp(pattern).test(line);
+  } catch {
+    return false;
+  }
+};
+
+/** One CodeTour step as ours: a file step checked against the code, or a text step (content and folder steps). */
+export function codeTourStep(s: CodeTourStep, i: number, files: Map<string, string>, nodes: { id: string; files: string[] }[]): Step | null {
+  const title = (s.title ?? `Step ${i + 1}`).slice(0, 80);
+  const narration = (s.description ?? "").trim().slice(0, 1200);
+  const file = s.file?.replace(/^\.?\//, "");
+  if (!file) {
+    if (!narration && !s.directory) return null;
+    const dir = s.directory ? `\`${s.directory.replace(/^\.?\//, "").replace(/\/?$/, "/")}\` ` : "";
+    return { node: "", title, file: "", startLine: 0, endLine: 0, anchor: "", narration: `${dir}${narration}`.trim(), corrected: false };
+  }
+  const text = files.get(file)?.split("\n");
+  if (!text) return null;
+  // A `pattern` step names its line by a regular expression instead of a number.
+  const byPattern = !s.line && s.pattern ? text.findIndex((l) => safeTest(s.pattern!, l)) + 1 || undefined : undefined;
+  const line = s.line ?? byPattern ?? s.selection?.start?.line ?? 1;
+  const start = s.selection?.start?.line ?? line;
+  const end = Math.min(text.length, Math.max(start, s.selection?.end?.line ?? start + 4));
+  const grounded = groundSteps([{ node: "", title, file, startLine: start, endLine: end, anchor: text[line - 1] ?? "", narration: narration || "No description in the tour file." }], files, nodes);
+  return grounded.steps[0] ?? null;
+}
+
+/** A CodeTour file as one of our tours, its steps checked against the code; null when fewer than two steps hold up. */
+export function codeTourToTour(ct: CodeTourFile, path: string, files: Map<string, string>, nodes: { id: string; files: string[] }[], source: "codetour" | "custom"): Tour | null {
+  const raw = Array.isArray(ct.steps) ? ct.steps : [];
+  const steps = raw.map((s, i) => codeTourStep(s, i, files, nodes)).filter((s): s is Step => !!s);
+  if (steps.length < 2 || !steps.some(onCode)) return null;
+  const title = (typeof ct.title === "string" && ct.title.trim() ? ct.title : path.split("/").pop()!.replace(/\.tour$/, "")).slice(0, 100);
+  return {
+    id: questionId(`${source}:${path}`),
+    source,
+    ...(ct.isPrimary || path === "main.tour" ? { primary: true } : {}),
+    question: title,
+    title,
+    summary: (typeof ct.description === "string" ? ct.description : source === "codetour" ? "A tour written by the maintainers with CodeTour." : "").slice(0, 600),
+    steps,
+    check: { corrected: steps.filter((s) => s.corrected).length, dropped: raw.length - steps.length },
+    calls: [],
+  };
+}
 
 /**
- * Turns the repo's own VS Code CodeTour files (.tours/*.tour, .github/tours/*.tour) into tours, checked against
- * the code like ours. Runs once per commit; free (no model call).
+ * Turns the repo's own VS Code CodeTour files into tours, checked against the code like ours, in CodeTour's order
+ * with the primary tour first. Runs once per commit; free (no model call).
  */
 export async function importCodeTours(p: Prepared, atlas: Atlas): Promise<void> {
   const marker = `${base(p.info)}/codetours.json`;
   if (await getJSON<{ done: boolean }>(marker)) return;
-  const files = p.snapshot.files.filter((f) => /(^|\/)(\.tours|\.github\/tours)\/[^/]+\.tour$/.test(f.path));
+  const parsed = p.snapshot.files.filter((f) => CODETOUR_PATH.test(f.path)).flatMap((f) => {
+    try {
+      return [{ path: f.path, tour: JSON.parse(f.text) as CodeTourFile }];
+    } catch {
+      return [];
+    }
+  });
   const nodes = atlas.nodes.map((n) => ({ id: n.id, files: n.files }));
   const index = await getTourIndex(p.info);
-  for (const f of files.slice(0, 12)) {
-    let ct: CodeTourFile;
-    try {
-      ct = JSON.parse(f.text) as CodeTourFile;
-    } catch {
-      continue;
-    }
-    const steps = (ct.steps ?? [])
-      .filter((s) => s.file && s.line && p.files.has(s.file.replace(/^\.?\//, "")))
-      .map((s, i) => {
-        const file = s.file!.replace(/^\.?\//, "");
-        const text = p.files.get(file)!.split("\n");
-        const start = s.selection?.start?.line ?? s.line!;
-        const end = Math.min(text.length, Math.max(start, s.selection?.end?.line ?? start + 4));
-        return {
-          node: "",
-          title: (s.title ?? `Step ${i + 1}`).slice(0, 80),
-          file,
-          startLine: start,
-          endLine: end,
-          anchor: text[s.line! - 1] ?? "",
-          narration: (s.description ?? "").replace(/\s+/g, " ").trim().slice(0, 600) || "No description in the tour file.",
-        };
-      });
-    const grounded = groundSteps(steps, p.files, nodes);
-    if (grounded.steps.length < 2) continue;
-    const title = (ct.title ?? f.path.split("/").pop()!.replace(/\.tour$/, "")).slice(0, 100);
-    const id = questionId(`codetour:${f.path}`);
-    const tour: Tour = {
-      id,
-      source: "codetour",
-      question: title,
-      title,
-      summary: (ct.description ?? "A tour written by the maintainers with CodeTour.").slice(0, 600),
-      steps: grounded.steps,
-      check: { corrected: grounded.corrected, dropped: grounded.dropped },
-      calls: [],
-    };
-    await putJSON(`${base(p.info)}/tours/${id}.json`, tour);
-    index.push({ id, title, question: title, steps: tour.steps.length, cost: null, at: Date.now(), source: "codetour" });
+  for (const { path, tour: ct } of orderCodeTours(parsed).slice(0, 12)) {
+    const tour = codeTourToTour(ct, path, p.files, nodes, "codetour");
+    if (!tour) continue;
+    await putJSON(`${base(p.info)}/tours/${tour.id}.json`, tour);
+    const { id, title } = tour;
+    index.push({ id, title, question: title, steps: tour.steps.length, cost: null, at: Date.now(), source: "codetour", ...(tour.primary ? { primary: true } : {}) });
   }
   await putJSON(`${base(p.info)}/tours.json`, index);
   await putJSON(marker, { done: true });
+}
+
+// --- Tours that follow the code ----------------------------------------------------------------------------------
+/** The most recent other read of this repo (the same folders), whose tours can come along. */
+async function earlierRead(info: Pick<RepoInfo, "owner" | "repo" | "sha"> & { scope?: string }): Promise<{ sha: string; commit: string } | null> {
+  const here = base(info);
+  const prefix = here.slice(0, here.lastIndexOf("/") + 1);
+  const scopeOf = (commit: string) => commit.slice(prefix.length).replace(/^[^~]*/, "");
+  const reads = (await keysLike(`${prefix}%/atlas.json`))
+    .map(({ key, at }) => ({ commit: key.slice(0, -"/atlas.json".length), at }))
+    .filter((r) => r.commit.startsWith(prefix) && !r.commit.slice(prefix.length).includes("/") && r.commit !== here && scopeOf(r.commit) === scopeOf(here))
+    .sort((a, b) => b.at - a.at);
+  return reads[0] ? { commit: reads[0].commit, sha: reads[0].commit.slice(prefix.length).split("~")[0] } : null;
+}
+
+/** The earlier read's tours not here yet: generated, hand-written and opened from links (CodeTour files are read again). */
+async function toursToCarry(p: Prepared) {
+  const prev = await earlierRead(p.info);
+  if (!prev) return null;
+  const have = new Set((await getTourIndex(p.info)).map((t) => t.id));
+  const entries = ((await getJSON<TourIndexEntry[]>(`${prev.commit}/tours.json`)) ?? []).filter((e) => !have.has(e.id) && e.source !== "codetour");
+  return { prev, entries };
+}
+
+/** How many tours "Bring tours from the earlier read" would bring, and from which commit. */
+export async function carryable(p: Prepared): Promise<{ from: string; count: number } | null> {
+  const c = await toursToCarry(p);
+  return c?.entries.length ? { from: c.prev.sha, count: c.entries.length } : null;
+}
+
+/**
+ * Brings the earlier read's tours to this commit, each step checked again: steps whose quoted line is still there
+ * move with it, the rest are kept and marked stale. Runs after every new read, and from "Bring tours". Free.
+ */
+export async function carryTours(p: Prepared, atlas: Atlas): Promise<{ from: string; count: number } | null> {
+  const c = await toursToCarry(p);
+  if (!c?.entries.length) return null;
+  const nodes = atlas.nodes.map((n) => ({ id: n.id, files: n.files }));
+  const index = await getTourIndex(p.info);
+  let count = 0;
+  for (const e of c.entries) {
+    const tour = await getJSON<Tour>(`${c.prev.commit}/tours/${e.id}.json`);
+    if (!tour || tour.pull) continue;
+    const paths = [...new Set(tour.steps.filter(onCode).map((s) => s.file))];
+    const old = await Promise.all(paths.map(async (f) => [f, await fileFromStore(c.prev.commit, f)] as const));
+    const oldFiles = new Map(old.filter((x): x is [string, string] => x[1] !== null));
+    await putJSON(`${base(p.info)}/tours/${e.id}.json`, carryTour(tour, oldFiles, p.files, nodes, c.prev.sha));
+    index.push(e);
+    count++;
+  }
+  if (count) await putJSON(`${base(p.info)}/tours.json`, index);
+  return { from: c.prev.sha, count };
 }
 
 // --- Shared with the Ask answers module ------------------------------------------------------------------------

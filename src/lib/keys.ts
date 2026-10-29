@@ -12,3 +12,22 @@ export function shortcutAllowed(key: string, target: Target, dialogOpen: boolean
   if (key.startsWith("Arrow") && target?.closest(USES_ARROWS)) return false;
   return true;
 }
+
+const CHAR_KEYS = "codetrail:char-keys";
+
+/** Whether single-character shortcuts (/, ?, T, F) are on. They can be switched off for speech input (WCAG 2.1.4). */
+export function charKeysOn(): boolean {
+  try {
+    return localStorage.getItem(CHAR_KEYS) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setCharKeys(on: boolean) {
+  try {
+    localStorage.setItem(CHAR_KEYS, on ? "on" : "off");
+  } catch {
+    // No storage: the setting lasts until the page closes.
+  }
+}

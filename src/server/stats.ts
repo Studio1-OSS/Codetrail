@@ -51,7 +51,8 @@ export async function siteTotals(): Promise<SiteTotals> {
   const r = schema.calls.record;
   const [ledger] = await db
     .select({
-      reads: sql<number>`coalesce(sum(json_extract(${r}, '$.kind') = 'atlas'), 0)`,
+      // Whole reads only: a folder-scoped read (its key ends in ~<scope hash>) isn't the repo read whole.
+      reads: sql<number>`coalesce(sum(json_extract(${r}, '$.kind') = 'atlas' and instr(${schema.calls.commit}, '~') = 0), 0)`,
       tours: sql<number>`coalesce(sum(json_extract(${r}, '$.kind') != 'atlas'), 0)`,
       inputTokens: sql<number>`coalesce(sum(json_extract(${r}, '$.usage.input')), 0)`,
       cachedTokens: sql<number>`coalesce(sum(json_extract(${r}, '$.usage.cached')), 0)`,

@@ -4,7 +4,7 @@ import { ImageResponse } from "next/og";
 import { MODEL_LABEL } from "@/env";
 import { font } from "@/server/og";
 import { KIND_COLOR, SUPPORT } from "@/lib/palette";
-import type { Tour } from "@/lib/schemas";
+import { onCode, type Tour } from "@/lib/schemas";
 import { getLedger, getStoredAtlas, getStoredTour, getTourIndex, latestReadSha, prepare } from "@/server/trail/service";
 
 export const maxDuration = 60;
@@ -32,7 +32,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
 
   const lines = new Map(p.summary.fileSizes.map(([path, l]) => [path, l]));
   const title = tour?.question ?? `${owner}/${repo}`;
-  const steps = tour?.steps ?? [];
+  // Text-only steps have no place on the map or in a file.
+  const steps = (tour?.steps ?? []).filter(onCode);
   const call = tour?.calls[0];
   const record = call ? ledger.find((c) => c.id === call.id) ?? call : null;
   const pull = tour?.pull;

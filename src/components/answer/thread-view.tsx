@@ -72,7 +72,7 @@ export function ThreadView({ summary, thread, activeRef, followUps, busy, open =
         </ul>
       )}
       {expanded ? (
-        <AskBox summary={summary} label="Ask a follow-up" placeholder="e.g. Why is it done this way?" busy={busy} onAsk={onAsk} followUp />
+        <AskBox summary={summary} label="Ask a follow-up" placeholder="e.g. Why is it done this way?" busy={busy} onAsk={onAsk} followUp autoFocus={!open} />
       ) : (
         <button onClick={() => setExpanded(true)} className="self-start font-mono text-[11px] tracking-[0.06em] text-fg-3 hover:text-fg">
           Ask a follow-up…

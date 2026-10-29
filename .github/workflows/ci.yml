@@ -1,0 +1,26 @@
+# Typecheck, unit tests, dead-code check and a production build on every push and pull request. No secrets:
+# nothing here calls the model. The browser checks (pnpm a11y, pnpm screenshots, pnpm demo:test) need Chrome and
+# repos already read, so they run locally against a running app.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm lint:dead
+      - run: pnpm build

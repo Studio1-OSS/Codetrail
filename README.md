@@ -2,7 +2,7 @@
 
 <h1 align="center">Codetrail</h1>
 
-<p align="center"><b>Understand any codebase in one read.</b><br>A map, guided tours, docs and answers for a GitHub repo, a pull request or a folder on your machine. Every line it points to is checked against the code.</p>
+<p align="center"><b>Architecture diagrams, wiki docs, code tours and Q&amp;A for any GitHub repo, from one link.</b><br>For a repo, a pull request or a folder on your machine. Open source, runs on DeepSeek V4.1 Flash 1017, and every line it points to is checked against the code.</p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" alt="Next.js 16">
@@ -13,9 +13,15 @@
 <a href="https://studio1hq.com"><img src="https://img.shields.io/badge/built%20by-Studio1%20team-ff6b1a" alt="Built by Studio1 team"></a>
 </p>
 
+> [!NOTE]
+> Codetrail is an early version. It works end to end, but there are rough edges. If you hit one, [open an issue](https://github.com/Studio1-OSS/Codetrail/issues) or send a fix: see [Contributing](#contributing).
+
 <p align="center"><a href="#run-it">Run it</a> · <a href="docs/user-guide.md">User guide</a> · <a href="#what-you-get">What you get</a> · <a href="#how-it-compares">How it compares</a> · <a href="#how-codetrail-uses-deepseek-v41-flash-1017">How it works</a> · <a href="#what-it-costs-measured-october-2026">What it costs</a></p>
 
-![Codetrail on honojs/hono: the architecture diagram in its layers with the tour's steps marked, the current step's explanation, and the checked lines in the code](docs/screenshots/tour.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/tour-light.png">
+  <img src="docs/screenshots/tour.png" alt="Codetrail on honojs/hono: the architecture diagram in its layers with the tour's steps marked, the current step's explanation, and the checked lines in the code">
+</picture>
 
 Getting to know a new codebase usually means hours of clicking through files. Codetrail hands the whole repo to **[DeepSeek V4.1 Flash 1017](https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=deepseek-ai/DeepSeek-V4.1-Flash-1017)** in one prompt. With a 1M-token context there's no search index guessing which pieces matter: the model sees every file. It draws the map of modules, walks you through how the code actually runs, step by step, and answers your questions. Each step quotes a real line of code, and Codetrail finds that line in the file before showing it.
 
@@ -25,26 +31,27 @@ It's open source and runs on your own [Nebius Token Factory](https://dub.sh/aist
 
 - **The whole repo, one prompt.** The model has a 1,048,576-token context, so files go in whole with line numbers. There's no search index choosing chunks, so a flow that crosses ten files stays whole.
 - **Every step is checked.** Each step quotes one line of code. Codetrail finds that line in the real file at that commit and moves the range if the model's line numbers drifted. Steps it can't find are dropped, never shown. Map links backed by real imports are marked.
-- **An architecture diagram.** The modules are drawn top to bottom in the order calls flow, grouped into layers and coloured, with links confirmed by imports drawn solid. Double-click a module to open it into its files; click a link to see the import lines behind it. The Modules view shows the same map as a graph you can drag, and the Files view is the real import graph. Tours light up their route on every view. Export it as Mermaid (layers, colours and GitHub links included), SVG, PNG or an editable draw.io file, or embed a live image and badge in your README.
+- **An architecture diagram.** The modules are drawn top to bottom in the order calls flow, grouped into layers and coloured, with links confirmed by imports drawn solid. Double-click a module to open it into its files; click a link to see the import lines behind it. The Modules view shows the same map as a graph you can drag, and the Files view is the real import graph. Tours light up their route on every view. **Find** lights up any module, file or function, and **List** shows every view as text. Export it as Mermaid (layers, colours and GitHub links included), SVG, PNG or an editable draw.io file, or embed a live image (SVG or PNG) and badge in your README. A repo's link previews as its diagram.
 - **Function calls.** The Calls view shows one file's functions, what each calls and who calls them, worked out from the code: JavaScript and TypeScript with the TypeScript compiler, Python and Go by name through their imports.
-- **Ask anything.** One Ask box picks a tour or a short structured answer from your wording (generative UI: tables, file lists, call sequences, checked code references), or Thorough for harder questions. While you type, it shows anything already stored that answers the question, free.
+- **Ask anything.** One Ask box picks a tour or a short structured answer from your wording (generative UI: tables, file lists, call sequences, checked code references), or Thorough for harder questions. **Research** plans what to find out, looks in up to three rounds on the cached repo, then answers; the plan and each round stay openable. While you type, it shows anything already stored that answers the question, free.
 - **Follow-ups.** Every answer and repo tour suggests what to ask next and takes follow-up questions with a recap of the conversation. Conversations get their own link and replay free.
-- **Written docs.** One call writes a page for every module (overview, how it works, key files, where to look), every reference checked, each with a diagram of the module's files and neighbours. Export a page or all of them as Markdown (diagrams as Mermaid) or JSON; answers export as Markdown too.
+- **Written docs.** One call writes a page for every module (overview, how it works, key files, where to look), every reference checked, each with a diagram of the module's files and neighbours. Export a page or all of them as Markdown (diagrams as Mermaid) or JSON; answers export as Markdown too. The same docs make **slides** (architecture, every module, the main tour) with no model call, to present or download as one HTML file.
 - **Pull-request tours.** Paste a PR link (or `/owner/repo/pull/123`). DeepSeek already has the repo, so it gets only the change and walks through it in the order it runs. Changed lines are marked in the code, the diff is one click away, and notes for the reviewer (risks, missing tests, questions) each point at a checked line.
-- **Tours you can write.** Write your own tour, or edit a copy of a generated one: pick lines of code and say what they do; every step is checked against the code when you save. Wherever a tour stops, a mark sits in the code's margin and opens it there, like CodeTour's markers. Your progress through each tour is ticked off, and the last step offers the next one.
+- **Tours you can write.** Write your own tour, or edit a copy of a generated one: pick lines of code and say what they do, add text steps for an intro, and link to steps, other tours and files in the text; every step is checked against the code when you save. Open a CodeTour file from a GitHub link, or let the repo's own `.tours` load. Wherever a tour stops, a mark sits in the code's margin and opens it there, like CodeTour's markers. Your progress through each tour is ticked off, and tours read as a series both ways.
+- **Tours that follow the code.** Read a newer commit and every tour comes along: each step is found again by the line it quotes and moves with its code, and a step whose code is gone is flagged, not silently wrong. Free.
 - **Every file, searchable.** After the first read, the whole commit lives in SQLite with a full-text index: browse and search every file, copy code or a `path:lines` reference, and open GitHub file links (`/owner/repo/blob/<ref>/<path>#L10`) right in the app.
-- **Only the folders you want.** For a big monorepo, choose which folders to read (or skip) before you pay; the estimate follows as you choose, and the scoped read is stored apart from the full one.
-- **The receipt for every call.** Live prices, the price before every paid click, and fresh vs cached tokens, output, time and what cached input saved, on every call. A **Stop** button ends any call you no longer want; when no one else is waiting on it, DeepSeek stops writing.
-- **Share it.** Every tour step, answer, conversation, docs page and open file has its own link, and Back and Forward move between them. Tours get a share card image (route, stats, where each step sits in its file) that shows up as the link preview, and export to VS Code CodeTour.
+- **Only the folders you want.** For a big monorepo, choose which folders to read (or skip) before anything is spent; the estimate follows as you choose, and the scoped read is stored apart from the full one.
+- **The receipt for every call.** Live prices, the price before every click that calls the model, and fresh vs cached tokens, output, time and what cached input saved, on every call. A **Stop** button ends any call you no longer want; when no one else is waiting on it, DeepSeek stops writing.
+- **Share it.** Every tour step, answer, conversation, docs page and open file has its own link, and Back and Forward move between them. Tours get a share card image (route, stats, where each step sits in its file) that shows up as the link preview, and export to VS Code CodeTour. **Copy as a prompt** hands a module, tour or answer (with the architecture and its `file:line` references) to any AI chat.
 - **For AI tools.** Every read repo has a Markdown page at `/owner/repo.md` (architecture as Mermaid, modules, tours, docs and answers) and `/llms.txt` lists them, all from stored data. **Browse** lists every repo read on your instance.
-- **Inside your coding agent.** Codetrail is an MCP server, so Claude Code, Cursor and other agents can call it as a tool. Before touching unfamiliar code, an agent can ask for the map, a tour or an answer with exact `file:line` references instead of grepping its way around, and `codetrail_pr` hands it a reviewer's walkthrough of a pull request. Works for GitHub repos and your local folders. [Set it up](docs/user-guide.md#13-coding-agents-mcp).
-- **Your own code, on your machine.** Run it in one Docker container with your Nebius key and point it at a folder of projects: work that isn't on GitHub yet, or isn't pushed, gets the same map, tours, docs and answers, uncommitted changes included. It all stays in your own database. Private GitHub repos work too, with a token. [How](docs/user-guide.md#10-your-own-folders).
+- **Inside your coding agent.** Codetrail is an MCP server, so Claude Code, Cursor and other agents can call it as a tool. Before touching unfamiliar code, an agent can ask for the map, a tour or an answer with exact `file:line` references instead of grepping its way around, and `codetrail_pr` hands it a reviewer's walkthrough of a pull request. It also searches a read's files and returns its docs, free. Works for GitHub repos and your local folders, and installs as a Claude Code plugin with a skill. [Set it up](docs/user-guide.md#13-coding-agents-mcp).
+- **Your own code, on your machine.** Run it in one Docker container with your Nebius key and point it at a folder of projects: work that isn't on GitHub yet, or isn't pushed, gets the same map, tours, docs and answers, uncommitted changes included. Maps, tours and answers are stored in your own database; the code itself goes only to DeepSeek on your Nebius key. Private GitHub repos work too, with a token. [How](docs/user-guide.md#10-your-own-folders).
 
 <table>
 <tr>
-<td width="33%"><img src="docs/screenshots/architecture-open.png" alt="The architecture of Studio1-OSS/AgentC in its layers, the agent runtime opened into its files, and the nine import lines behind a link"></td>
-<td width="33%"><img src="docs/screenshots/calls.png" alt="The Calls view on hono's hono-base.ts: its functions and the functions they call in context.ts, url.ts and compose.ts, with line numbers"></td>
-<td width="33%"><img src="docs/screenshots/docs.png" alt="A docs page for polka's core module, with a diagram of its files, their imports and the modules it links to"></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/architecture-open-light.png"><img src="docs/screenshots/architecture-open.png" alt="The architecture of Studio1-OSS/AgentC in its layers, the agent runtime opened into its files, and the nine import lines behind a link"></picture></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/calls-light.png"><img src="docs/screenshots/calls.png" alt="The Calls view on hono's hono-base.ts: its functions and the functions they call in context.ts, url.ts and compose.ts, with line numbers"></picture></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/docs-light.png"><img src="docs/screenshots/docs.png" alt="A docs page for polka's core module, with a diagram of its files, their imports and the modules it links to"></picture></td>
 </tr>
 <tr>
 <td align="center"><sub>A module opened into its files, and the imports behind a link</sub></td>
@@ -52,14 +59,14 @@ It's open source and runs on your own [Nebius Token Factory](https://dub.sh/aist
 <td align="center"><sub>Docs with a diagram on every page</sub></td>
 </tr>
 <tr>
-<td width="33%"><img src="docs/screenshots/pr-tour.png" alt="A pull-request tour: the step explaining the new code, the changed modules marked on the map, and the file with added lines marked"></td>
-<td width="33%"><img src="docs/screenshots/answer.png" alt="A structured answer: the files in the request pipeline and a numbered call sequence, every reference checked"></td>
-<td width="33%"><img src="docs/screenshots/before-reading.png" alt="Before reading: how much of the context the repo fills, every file that will be sent, and the estimated cost"></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/pr-tour-light.png"><img src="docs/screenshots/pr-tour.png" alt="A pull-request tour: the step explaining the new code, the changed modules marked on the map, and the file with added lines marked"></picture></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/answer-light.png"><img src="docs/screenshots/answer.png" alt="A structured answer: the files in the request pipeline and a numbered call sequence, every reference checked"></picture></td>
+<td width="33%"><picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/before-reading-light.png"><img src="docs/screenshots/before-reading.png" alt="Before reading: how much of the context the repo fills, every file that will be sent, and the estimated cost"></picture></td>
 </tr>
 <tr>
 <td align="center"><sub>A pull request, changes marked</sub></td>
 <td align="center"><sub>An answer with checked references</sub></td>
-<td align="center"><sub>What a read will send and cost, before you pay</sub></td>
+<td align="center"><sub>What a read will send and cost, before anything is spent</sub></td>
 </tr>
 </table>
 
@@ -72,20 +79,20 @@ Codetrail does the jobs of four tools people use to understand a codebase. GitDi
 | What the model sees | Every file, one prompt | Tree, README, source excerpts | An index of the repo, searched per page and question | No model | AI agents search the code |
 | Architecture diagram | Layers, colours, routed links; open a module into its files | Layers, colours, links | Mermaid diagrams in wiki pages | — | C4 and UML, editable |
 | Written docs for every module | Yes, references checked, a diagram per page | A short overview | Yes, a wiki | — | Diagram-led docs |
-| Ask questions about the code | Yes, with follow-ups and a Thorough mode | — | Yes, with Deep Research | — | Yes |
+| Ask questions about the code | Yes, with follow-ups, Thorough and Research modes | — | Yes, with Deep Research | — | Yes |
 | Step-by-step walkthroughs with file + line | Generated or written by you, every line checked | — | Codemaps (code in execution order) | Hand-written | Walkthroughs in search results |
 | Tour markers in the code, progress | Yes | — | — | Yes | — |
 | Pull requests | A tour of the change, with review notes | — | — | Tours pinned to a branch or commit | PR diagrams (paid plan) |
-| Checked against the code | Every quoted line | Every linked path | — | Drift warnings in CI | — |
+| Checked against the code | Every quoted line, and again on each newer commit | Every linked path | — | Drift warnings in CI | — |
 | Export the diagram | Mermaid (with GitHub links), SVG, PNG, draw.io | Mermaid, PNG | — | `.tour` files | Mermaid, draw.io, PNG, SVG |
-| A live diagram image for a README | Yes, with a badge | Yes, with a badge | A badge | — | Embeds (Teams plan) |
+| A live diagram image for a README | SVG or PNG, with a badge; also the link preview | Yes, with a badge | A badge | — | Embeds (Teams plan) |
 | Markdown page for AI tools | `/owner/repo.md`, `llms.txt` | `/owner/repo.md`, `llms.txt` | — | — | — |
 | Read only some folders | Choose folders or globs | — | A page list in `.devin/wiki.json` | — | — |
 | What it costs you | Your Nebius key; the price shown before and after every call | Free quota, cost after a run | Free for public repos | Free | Free tier, Pro $19/month |
 | Works from a URL in the browser | Yes | Yes | Yes | VS Code (desktop and web) | VS Code |
-| MCP server for coding agents | Yes | Yes | Yes | — | — |
+| MCP server for coding agents | Yes, also a Claude Code plugin | Yes | Yes | — | — |
 | Open source | Yes, MIT | Yes, MIT | No | Yes, MIT | No |
-| Private code | Self-hosted; code goes only to your Nebius endpoint | With a GitHub token | With a Devin account | Local files | Local folders; code goes to cloud models |
+| Private code | Private repos with a GitHub token, and local folders; the code goes to DeepSeek on your Nebius key | With a GitHub token | With a Devin account | Local files | Local folders; code goes to cloud models |
 | Function-level call graph | JS/TS, Python, Go, from the code | — | — | — | Yes, from the language server |
 | Explainer video of a repo | — | Yes | — | — | — |
 
@@ -114,6 +121,8 @@ Nebius Token Factory prices for `deepseek-ai/DeepSeek-V4.1-Flash-1017`: $0.30 / 
 | pmndrs/zustand | 251K | Extra tour with the repo cached: **$0.005**, 99% of input from cache |
 | sindresorhus/ky | 437K | Whole-repo read: $0.134, 16 s |
 | lukeed/polka, PR #210 | 71K | Pull-request tour with the repo cached: **$0.007**, 95% from cache (PR #198, cache missed: $0.023) |
+| lukeed/polka, Research | 68K | A plan, 3 rounds (the third found nothing new) and the answer: **$0.049** for 5 calls, 49 s; 4 of 5 calls from cache |
+| lukeed/kleur, `test/` only | 7K | A read of one folder (5 of 18 files), map and tour: **$0.006**, 8 s |
 
 The prompt cache is best-effort ([Token Factory's caching docs](https://docs.tokenfactory.nebius.com/cached-tokens)): a call can land on a server that doesn't hold the repo yet, and an unused prefix can be dropped after a few minutes. In our runs, 6 of 13 follow-up calls were served from it. Every call shows its real cached share, the Ask box shows both prices before you ask, and stored tours, answers and conversations replay free.
 
@@ -194,6 +203,18 @@ Set `AUTH_MODE=github`, `BETTER_AUTH_SECRET` (any long random string), `BETTER_A
 
 ### MCP
 
+<a href="https://insiders.vscode.dev/redirect/mcp/install?name=codetrail&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fmcp%22%7D"><img src="https://img.shields.io/badge/VS_Code-Install_MCP-0098FF?logo=visualstudiocode&logoColor=white" alt="Install in VS Code"></a>
+<a href="https://cursor.com/install-mcp?name=codetrail&config=eyJ1cmwiOiJodHRwOi8vbG9jYWxob3N0OjMwMDAvYXBpL21jcCJ9"><img src="https://img.shields.io/badge/Cursor-Install_MCP-000000?logo=cursor&logoColor=white" alt="Install in Cursor"></a>
+
+Both point at `http://localhost:3000/api/mcp`, so start the app first. In Claude Code, the plugin adds the server and a skill that says when to use each tool (`CODETRAIL_MCP_URL` changes the address):
+
+```bash
+claude plugin marketplace add Studio1-OSS/Codetrail
+claude plugin install codetrail@codetrail
+```
+
+Or add the server alone:
+
 ```bash
 # With the app running (Docker, pnpm dev, or your own deployment)
 claude mcp add --transport http codetrail http://localhost:3000/api/mcp
@@ -206,9 +227,11 @@ Setup for Cursor and examples are in the [user guide](docs/user-guide.md#13-codi
 | Tool | |
 |---|---|
 | `codetrail_map(repo)` | Summary, modules with their layers and key files, connections (confirmed by imports or inferred), the architecture as Mermaid, suggested tours |
-| `codetrail_ask(repo, question, thread?, thorough?)` | A short answer with checked code references and questions to ask next. Returns a thread id; pass it back to follow up in context |
+| `codetrail_ask(repo, question, thread?, thorough?, research?)` | A short answer with checked code references and questions to ask next. Returns a thread id; pass it back to follow up in context. `research` plans and looks in rounds before answering |
 | `codetrail_tour(repo, question)` | Ordered steps with `path:Lx-Ly`, a GitHub link at the exact commit, and an explanation per step |
 | `codetrail_pr(repo, number)` | A reviewer's tour of a pull request: what it changes, steps through the PR's code, and review notes tied to checked lines. `repo` can be the PR's URL |
+| `codetrail_docs(repo, module?)` | The stored docs, or one module's page. Free |
+| `codetrail_search(query, repo?)` | Files of a read containing the query, with the matching lines; without a repo, the repos already read. Free |
 
 ### Scripts
 
@@ -218,15 +241,30 @@ pnpm tsx scripts/inspect.mts owner/repo     # what would be read and what it wou
 pnpm eval owner/repo [...]                  # map + first tour per repo, with cost and checks (costs money)
 pnpm smoke:nebius                           # model, context and price straight from Token Factory
 pnpm tsx scripts/check-gating.mts           # hosted sign-in and quota checks, no AI call
+pnpm a11y [owner/repo ...]                  # axe-core WCAG 2.2 AA scan of the main pages, both themes, no AI call
+pnpm screenshots                            # retake the README screenshots in both themes, no AI call
+pnpm demo:test                              # drive the demo flow in a browser and check it; replays stored work
 ```
 
 ## Accessibility
 
-Keyboard first: Tab through the map (Enter opens a module), ←/→ step through a tour, space plays or pauses, `/` searches files, `T` reads the tour as text (with the code, copyable as Markdown), `?` lists every shortcut, Esc closes whatever is open. Shortcuts never fire while you type or on a focused button that uses the key itself. Dialogs and drawers keep focus inside and return it on close. The current step is announced to screen readers, the map has a text alternative listing every module and its links, focus is always visible, colours were checked for colour-blind separation, and animations stop under reduced motion. On a phone, the tours, Ask box and docs open in a drawer, and the map scrolls with the page (two fingers to zoom it). Day and night themes follow your system or the toggle.
+Built to WCAG 2.2 AA:
+
+- **Keyboard.** Tab through the map's boxes from top to bottom (Enter selects, `O` opens a module, `[` `]` step through its links). With the map focused, `+` `−` `0` and the arrows zoom and pan. ←/→ step through a tour, space plays or pauses, `/` searches files, `F` finds on the map, `T` reads the tour as text, `?` lists every shortcut, and Esc closes whatever is open. Tabs, menus, radio groups and the file picker follow the usual arrow-key patterns.
+- **Shortcuts.** They never fire while you type. Single-key shortcuts can be switched off in the shortcuts dialog, for speech input.
+- **Focus.** It's always visible, including on diagram boxes, which scroll into view. Dialogs keep focus inside and return it on close, and so do menus and Stop.
+- **Diagrams as text.** Every diagram has a text version (**List**): modules and their links, files and imports, functions and calls, each a button.
+- **Screen readers.** Landmarks, a heading on every page and a skip link to the current step. Tours, answers, stages and copies are announced.
+- **Colour.** Contrast was checked in both themes, colour is never the only signal, and forced-colours mode is supported.
+- **Motion and size.** Animations stop under reduced motion, targets are at least 24 px, and the layout reflows down to 320 px.
+- **Phone.** The tours, Ask box and docs open in a drawer, and the map scrolls with the page (two fingers to zoom it).
+- **Checked.** `pnpm a11y` runs axe-core's WCAG 2.2 A and AA rules on the main pages in both themes; it reports no issues.
+
+Day and night themes follow your system or the toggle.
 
 ## Contributing
 
-Issues and pull requests are welcome. Run `pnpm test && pnpm typecheck && pnpm lint:dead` before sending one. Changes to prompts or checks should come with a `pnpm eval owner/repo` run on a small repo (it calls the model, so it costs a few cents).
+This is an early version, so there's plenty to improve, and contributions of any size help: a bug report with the repo and steps, a fix, better docs, or support for another language in the call graph. Issues and pull requests are welcome. Run `pnpm test && pnpm typecheck && pnpm lint:dead` before sending one; CI runs the same, plus a production build. For UI changes, `pnpm a11y` against a running app keeps the accessibility scan at zero issues. Changes to prompts or checks should come with a `pnpm eval owner/repo` run on a small repo (it calls the model, so it costs a few cents).
 
 ## License
 

@@ -4,9 +4,10 @@
 // screen reader, and copies as Markdown with links to the exact commit.
 import { useEffect, useState } from "react";
 import { Rich } from "@/components/rich";
-import type { RepoSummary, Tour } from "@/lib/schemas";
+import { onCode, type RepoSummary, type Tour } from "@/lib/schemas";
 import { blobUrl, mdLink as link } from "@/lib/ref";
 import { Dialog } from "./dialog";
+import { copyText } from "@/lib/announce";
 
 /** The commit a step's file is shown at: a PR tour's changed files at the PR's head, everything else at the read. */
 const shaFor = (tour: Tour, s: RepoSummary, file: string) => (tour.pull?.files.some((f) => f.path === file && f.status !== "removed") ? tour.pull.headSha : s.sha);
@@ -29,8 +30,7 @@ function tourToMarkdown(tour: Tour, s: RepoSummary, files: Record<string, string
     ...tour.steps.flatMap((st, i) => [
       `## ${i + 1}. ${st.title}`,
       "",
-      link(`\`${st.file}:${st.startLine}-${st.endLine}\``, blobUrl(s.owner, s.repo, shaFor(tour, s, st.file), st.file, st.startLine, st.endLine)),
-      "",
+      ...(onCode(st) ? [link(`\`${st.file}:${st.startLine}-${st.endLine}\``, blobUrl(s.owner, s.repo, shaFor(tour, s, st.file), st.file, st.startLine, st.endLine)), ""] : []),
       st.narration,
       "",
       ...(files[st.file] ? [...fence(files[st.file].slice(st.startLine - 1, st.endLine), st.file), ""] : []),
@@ -43,7 +43,7 @@ export function TranscriptDialog({ tour, summary, onClose }: { tour: Tour; summa
   const [files, setFiles] = useState<Record<string, string[]>>({});
   const [copied, setCopied] = useState(false);
   useEffect(() => {
-    for (const path of new Set(tour.steps.map((s) => s.file))) {
+    for (const path of new Set(tour.steps.filter(onCode).map((s) => s.file))) {
       fetch(`/api/file?owner=${encodeURIComponent(summary.owner)}&repo=${encodeURIComponent(summary.repo)}&sha=${shaFor(tour, summary, path)}&path=${encodeURIComponent(path)}`)
         .then((r) => (r.ok ? r.text() : ""))
         .then((t) => setFiles((f) => ({ ...f, [path]: t.split("\n") })))
@@ -63,7 +63,8 @@ export function TranscriptDialog({ tour, summary, onClose }: { tour: Tour; summa
         </div>
         <button
           onClick={() =>
-            navigator.clipboard?.writeText(tourToMarkdown(tour, summary, files)).then(() => {
+            copyText(tourToMarkdown(tour, summary, files), "Tour copied as Markdown").then((ok) => {
+              if (!ok) return;
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             })
@@ -79,14 +80,16 @@ export function TranscriptDialog({ tour, summary, onClose }: { tour: Tour; summa
             <h3 className="font-medium text-fg">
               <span className="font-mono text-trail">{String(i + 1).padStart(2, "0")}</span> <Rich text={s.title} />
             </h3>
-            <p className="mt-0.5 font-mono text-[12px] text-fg-3">
-              {s.file}, lines {s.startLine} to {s.endLine}
-            </p>
-            <p className="mt-1.5 text-[14px] leading-relaxed text-fg-2">
-              <Rich text={s.narration} />
-            </p>
+            {onCode(s) && (
+              <p className="mt-0.5 font-mono text-[12px] text-fg-3">
+                {s.file}, lines {s.startLine} to {s.endLine}
+              </p>
+            )}
+            <div className="mt-1.5 text-[14px] leading-relaxed text-fg-2">
+              <Rich text={s.narration} blocks />
+            </div>
             {files[s.file] && (
-              <pre className="code-surface mt-2 overflow-x-auto rounded-[10px] bg-code p-3 font-mono text-[12px] leading-5 text-[#cfd0d6]" aria-label={`Code from ${s.file}, lines ${s.startLine} to ${s.endLine}`}>
+              <pre tabIndex={0} className="code-surface mt-2 overflow-x-auto rounded-[10px] bg-code p-3 font-mono text-[12px] leading-5 text-[#cfd0d6]">
                 {files[s.file]
                   .slice(s.startLine - 1, s.endLine)
                   .map((l, k) => `${String(s.startLine + k).padStart(4)}  ${l}`)

@@ -1,11 +1,13 @@
 // Ask answers with generative UI. POST streams the answer (SSE) as DeepSeek writes it, standalone or as a follow-up
-// in a conversation (`thread`, or `root` to start one); GET replays a stored one.
+// in a conversation (`thread`, or `root` to start one), or as Research (a plan, rounds of findings, then the answer);
+// GET replays a stored one.
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { runIdOf } from "@/server/cancel";
 import { callerOf, errorResponse, repoAt, sse, threadStart, refOf } from "@/server/http";
 import { recordReplay } from "@/server/stats";
 import { getAnswer, getStoredAnswer } from "@/server/trail/ask";
+import { getResearch } from "@/server/trail/research";
 import { askFollowUp, type ThreadStart } from "@/server/trail/threads";
 import { getAtlas, getLedger, prepare } from "@/server/trail/service";
 
@@ -26,7 +28,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  let body: { owner: string; repo: string; sha: string; scope?: string; question: string; mode: "answer" | "thorough" } & ThreadStart;
+  let body: { owner: string; repo: string; sha: string; scope?: string; question: string; mode: "answer" | "thorough" | "research" } & ThreadStart;
   let who: string;
   let runId: string | undefined;
   try {
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
       ...repoAt.parse(raw),
       ...threadStart.parse(raw),
       question: z.string().trim().min(3).max(300).parse(raw.question),
-      mode: z.enum(["answer", "thorough"]).default("answer").parse(raw.mode),
+      mode: z.enum(["answer", "thorough", "research"]).default("answer").parse(raw.mode),
     };
     who = await callerOf(req);
   } catch (error) {
@@ -60,7 +62,11 @@ export async function POST(req: Request) {
         }
       },
     };
-    if (body.thread || body.root) {
+    if (body.mode === "research") {
+      // Research answers a new question: the stages show as they go.
+      const { answer, fromCache } = await getResearch(p, atlas, body.question, who, { stream, onStage: (s) => send({ type: "stage", ...s }) });
+      send({ type: "done", answer, fromCache, ledger: await getLedger(p.info) });
+    } else if (body.thread || body.root) {
       const { thread, answer, fromCache } = await askFollowUp(p, atlas, body, body.question, body.mode, who, stream);
       send({ type: "done", answer, fromCache, thread, ledger: await getLedger(p.info) });
     } else {

@@ -113,8 +113,8 @@ function TreeDir({ dir, depth, open: initial, colorOf, onOpen }: { dir: Dir; dep
   return (
     <div>
       {depth > 0 && (
-        <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1 py-1 pr-3 text-left text-fg-2 hover:bg-raised" style={{ paddingLeft: 8 + (depth - 1) * 14 }}>
-          <ChevronRight className={`size-3 shrink-0 transition ${open ? "rotate-90" : ""}`} />
+        <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-1 py-1 pr-3 text-left text-fg-2 hover:bg-raised" style={{ paddingLeft: 8 + (depth - 1) * 14 }}>
+          <ChevronRight className={`size-3 shrink-0 transition ${open ? "rotate-90" : ""}`} aria-hidden />
           <span className="truncate">{dir.name}/</span>
           <span className="ml-auto shrink-0 text-[10.5px] text-fg-3">{formatTokens(dir.tokens)}</span>
         </button>

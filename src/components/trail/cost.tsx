@@ -74,7 +74,7 @@ export function CostDrawer({ open, onClose, ledger, summary }: { open: boolean; 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5">
           <div className="grid grid-cols-3 border-y border-line">
             {[
-              { label: "Paid", value: formatUsd(totalCost(ledger)), cls: "text-trail" },
+              { label: "Spent on your key", value: formatUsd(totalCost(ledger)), cls: "text-trail" },
               { label: "Saved by cached input", value: formatUsd(totalSaved(ledger, summary)), cls: "text-verified" },
               { label: "Input cached", value: `${input ? Math.round((cached / input) * 100) : 0}%`, cls: "text-fg" },
             ].map((s) => (

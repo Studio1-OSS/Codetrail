@@ -1,18 +1,21 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, Link2, BarChart3, BookOpen, FileSearch, Keyboard, Loader2, Lock, Maximize2, Minimize2, MousePointerClick, PanelLeft, RotateCcw, Square, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, Link2, BarChart3, BookOpen, FileSearch, Keyboard, Loader2, Lock, Maximize2, Minimize2, MessageSquareText, MousePointerClick, PanelLeft, RotateCcw, Square, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "@/components/logo";
-import { Rich } from "@/components/rich";
+import { Rich, RichContext, type RichLinks } from "@/components/rich";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SignInModal, UserMenu } from "@/components/user-menu";
 import { formatUsd } from "@/lib/format";
 import { groupsOf } from "@/lib/architecture";
-import type { Route } from "@/lib/diagram";
+import { plainLabel } from "@/lib/architecture";
+import { architectureSpec, type LinkInfo } from "@/lib/diagram";
 import type { TourMark } from "@/server/trail/service";
 import { tourToCodeTour } from "@/lib/export-map";
-import { shortcutAllowed } from "@/lib/keys";
-import { markSeen, readSeen } from "@/lib/progress";
+import { promptFor, type PromptFocus } from "@/lib/prompt";
+import { charKeysOn, shortcutAllowed } from "@/lib/keys";
+import { announce, copyText } from "@/lib/announce";
+import { markSeen, readSeen, resetSeen } from "@/lib/progress";
 import { parseScope, scopeLabel } from "@/lib/scope";
 import { SUPPORT } from "@/lib/palette";
 import type { Atlas, CallRecord, PullIndexEntry, PullView, RepoSummary, Tour, TourIndexEntry } from "@/lib/schemas";
@@ -36,6 +39,7 @@ import { answerFollowUps, answerTitle, type Thread, type ThreadIndexEntry, type 
 import { DocsView } from "@/components/docs/docs-view";
 import type { Docs } from "@/lib/docs-schema";
 import type { StoredAnswer } from "@/lib/answer-schema";
+import type { ResearchStage } from "@/server/trail/research";
 
 type Phase = "preparing" | "ready" | "reading" | "map" | "error";
 const SPEEDS = [1, 1.5, 2];
@@ -76,8 +80,8 @@ type Problem = { text: string; retry?: () => void; stopped?: boolean };
 const dwell = (text: string, speed: number) => Math.min(9_000, Math.max(4_000, 2_000 + text.length * 28)) / speed;
 
 /** Downloads a tour as a VS Code CodeTour file. */
-function downloadCodeTour(tour: Tour, summary: RepoSummary) {
-  const blob = new Blob([JSON.stringify(tourToCodeTour(tour, summary), null, 2)], { type: "application/json" });
+function downloadCodeTour(tour: Tour, summary: RepoSummary, next?: string) {
+  const blob = new Blob([JSON.stringify(tourToCodeTour(tour, summary, next), null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${tour.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "tour"}.tour`;
@@ -143,7 +147,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   const [docPage, setDocPage] = useState<string | null>(null);
   const [docsBusy, setDocsBusy] = useState(false);
   const [answers, setAnswers] = useState<{ id: string; question: string; title: string }[]>([]);
-  const [answer, setAnswer] = useState<{ question: string; text: string; streaming: boolean; stored: StoredAnswer | null; fromCache: boolean } | null>(null);
+  const [answer, setAnswer] = useState<{ question: string; text: string; streaming: boolean; stored: StoredAnswer | null; fromCache: boolean; stage?: ResearchStage } | null>(null);
   const [pullView, setPullView] = useState<PullView | null>(null);
   const [pullError, setPullError] = useState<string | null>(null);
   const [pulls, setPulls] = useState<PullIndexEntry[]>([]);
@@ -154,8 +158,8 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   const [sideOpen, setSideOpen] = useState(false);
   // Modules opened into their files on the map (kept in the address as ?open=a,b).
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(typeof window === "undefined" ? [] : (new URLSearchParams(window.location.search).get("open") ?? "").split(",").filter(Boolean)));
-  // A clicked link on the map, with the import lines behind it.
-  const [evidence, setEvidence] = useState<Route | null>(null);
+  // A clicked link on the map (or picked from a module's panel), with the import lines behind it.
+  const [evidence, setEvidence] = useState<LinkInfo | null>(null);
   // Where stored tours stop in the code, for the code panel's markers.
   const [marks, setMarks] = useState<TourMark[]>([]);
   // The file shown in the map's Calls view.
@@ -240,6 +244,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
         setAnswer(null);
         setDocPage(null);
         setTourFromCache(r.fromCache);
+        announce(`Tour ready: ${r.tour.title}, ${r.tour.steps.length} steps.`);
         setLedger(r.ledger);
         keepThread(r.thread);
         // Tours inside a conversation belong to it, not to the repo's list.
@@ -360,6 +365,9 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
     }
   }
 
+  /** What's in focus, with the architecture, as a prompt to paste into any AI chat. */
+  const copyPrompt = (focus: PromptFocus) => atlas && summary && void copyText(promptFor(atlas, summary, focus, summary), "Prompt copied. Paste it into any AI chat");
+
   /** Opens the docs, writing them first (one call on the cached repo) if this commit has none yet. */
   async function openDocs(node?: string) {
     if (!summary) return;
@@ -385,6 +393,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
       setDocs(r.docs);
       setLedger(r.ledger);
       setDocPage(node ?? r.docs.pages[0]?.node ?? null);
+      announce(`Docs written: ${r.docs.pages.length} pages.`);
       setSelected(null);
     } catch (e) {
       fail(e, () => void openDocs(node));
@@ -414,7 +423,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   }
 
   /** A generative-UI answer, streamed so it renders as DeepSeek writes it. */
-  async function askAnswer(question: string, mode: "answer" | "thorough" = "answer", start?: ThreadStart): Promise<boolean> {
+  async function askAnswer(question: string, mode: "answer" | "thorough" | "research" = "answer", start?: ThreadStart): Promise<boolean> {
     if (!summary || tracing) return false;
     setPlaying(false);
     setSelected(null);
@@ -433,11 +442,18 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
       });
       const ev = await readEvents<{ answer: StoredAnswer; fromCache: boolean; ledger: CallRecord[]; thread?: Thread }>(res, (e) => {
         if (e.type === "text") setAnswer((a) => (a ? { ...a, text: e.text as string } : a));
+        // Research: each stage shows (and is announced) as it starts.
+        if (e.type === "stage") {
+          const stage = e as unknown as ResearchStage;
+          setAnswer((a) => (a ? { ...a, stage } : a));
+          announce(stage.stage === "plan" ? "Planning the research." : stage.stage === "round" ? `Research round ${stage.n}.` : "Writing the answer.");
+        }
       });
       const stored = ev.answer;
       setAnswer({ question: stored.question, text: stored.text, streaming: false, stored, fromCache: ev.fromCache });
       setLedger(ev.ledger);
       keepThread(ev.thread);
+      announce(`Answer ready: ${answerTitle(stored.text) ?? stored.question}.`);
       if (!ev.thread) setAnswers((list) => [...list.filter((x) => x.id !== stored.id), { id: stored.id, question: stored.question, title: answerTitle(stored.text) ?? stored.question }]);
       return true;
     } catch (e) {
@@ -667,6 +683,20 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
     };
   }, [summary, phase, tours.length]);
 
+  // Tours of the repo's earlier read that could come along (reads made before tours were carried automatically).
+  const [carry, setCarry] = useState<{ from: string; count: number } | null>(null);
+  useEffect(() => {
+    if (!summary || phase !== "map") return;
+    let live = true;
+    fetch(`/api/tour/carry?${qs(summary)}`)
+      .then((r) => (r.ok ? r.json() : { carry: null }))
+      .then((d: { carry: { from: string; count: number } | null }) => live && setCarry(d.carry))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [summary, phase, tours.length]);
+
   // Remember where each tour was left, and tick the step as seen.
   const seenKey = summary ? `${summary.owner}/${summary.repo}@${summary.sha}${summary.scope ? `~${summary.scope}` : ""}` : null;
   useEffect(() => {
@@ -703,6 +733,13 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
         return;
       }
       if (!shortcutAllowed(e.key, e.target as HTMLElement | null, modalOpen)) return;
+      // Single-character shortcuts can be switched off in the shortcuts dialog (WCAG 2.1.4).
+      if (["/", "?", "t", "T", "f", "F"].includes(e.key) && !charKeysOn()) return;
+      if ((e.key === "f" || e.key === "F") && document.getElementById("map-find")) {
+        e.preventDefault();
+        document.getElementById("map-find")!.focus();
+        return;
+      }
       if (e.key === "/" && summary && atlas) {
         e.preventDefault();
         setBrowse(true);
@@ -724,6 +761,16 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   }, [tour, summary, atlas, tourOnScreen, modalOpen, selected, evidence]);
 
   const current = tour?.steps[step];
+  // Links inside a tour's text: [#3] to a step, [Tour title#2] to another tour, a backticked path to its file.
+  const repoFiles = useMemo(() => new Set(summary ? [...summary.fileSizes.map(([p]) => p), ...(summary.otherFiles ?? []).map(([p]) => p)] : []), [summary]);
+  const richLinks: RichLinks = {
+    steps: tour?.steps.length,
+    onStep: (i) => (setPlaying(false), setViewFile(null), setStep(i)),
+    tours,
+    onTour: (id, at) => (setThread(null), void openTour(id, at)),
+    files: repoFiles,
+    onFile: (path, line) => setViewFile({ path, line }),
+  };
 
   const header = (
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5">
@@ -791,7 +838,8 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
     return (
       <div className="flex min-h-dvh flex-col bg-ink">
         {header}
-        <main className="dot-grid flex flex-1 items-start justify-center px-4 py-10 sm:py-14">
+        <main id="main" className="dot-grid flex flex-1 items-start justify-center px-4 py-10 sm:py-14">
+          {(phase === "preparing" || phase === "error") && <h1 className="sr-only">{owner === LOCAL_OWNER ? repo : `${owner}/${repo}`}</h1>}
           {phase === "preparing" && (
             <div className="mt-24 flex flex-col items-center gap-3 text-center">
               <Loader2 className="size-6 animate-spin text-trail" />
@@ -833,12 +881,21 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   // What closing a file goes back to.
   const under = docShown ? "the docs page" : answer ? "the answer" : tour ? "the tour" : null;
   // From the last step: the next suggested tour not finished yet (free when stored), else the next one asked here.
-  const nextTour = (() => {
+  const tourOrder = (() => {
     if (!tour || tour.pull) return null;
     const norm = (q: string) => q.trim().toLowerCase().replace(/\s+/g, " ");
     const stored = new Map(tours.map((t) => [norm(t.question), t]));
     const order = [...atlas.tours.map((t) => ({ title: t.title, question: t.question, saved: stored.get(norm(t.question)) })), ...tours.filter((t) => !atlas.tours.some((a) => norm(a.question) === norm(t.question))).map((t) => ({ title: t.title, question: t.question, saved: t }))];
-    const at = order.findIndex((o) => o.saved?.id === tour.id || norm(o.question) === norm(tour.question));
+    return { order, at: order.findIndex((o) => o.saved?.id === tour.id || norm(o.question) === norm(tour.question)) };
+  })();
+  // From the first step: the saved tour just before this one, so a series reads both ways.
+  const prevTour = (() => {
+    const before = tourOrder && tourOrder.at > 0 ? tourOrder.order.slice(0, tourOrder.at).reverse().find((o) => o.saved && o.saved.id !== tour?.id)?.saved : undefined;
+    return before && before.id !== tour?.id ? { title: before.title, run: () => (setThread(null), void openTour(before.id, 0)) } : null;
+  })();
+  const nextTour = (() => {
+    if (!tour || !tourOrder) return null;
+    const { order, at } = tourOrder;
     const rest = [...order.slice(at + 1), ...order.slice(0, Math.max(0, at))].filter((o) => o.saved?.id !== tour.id);
     const pick = rest.find((o) => !o.saved || new Set(seen[o.saved.id] ?? []).size < o.saved.steps) ?? rest[0];
     if (!pick) return null;
@@ -857,6 +914,13 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
     setSideOpen(false);
     f(...a);
   };
+/** Opening something else while writing a tour: asks first, then leaves the editor. */
+const leaving = <A extends unknown[]>(f: (...a: A) => unknown) =>
+  picked((...a: A) => {
+    if (draft?.steps.length && !window.confirm("Leave the tour you're writing? It hasn't been saved.")) return;
+    setDraft(null);
+    f(...a);
+  });
   const codePath = viewFile?.path ?? (answer || docPage ? undefined : current?.file);
   // In a PR tour, changed files open at the PR's head with their changes marked.
   const changedFile = codePath && tour?.pull ? tour.pull.files.find((f) => f.path === codePath && f.status !== "removed") : undefined;
@@ -875,7 +939,12 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
           </a>
         </p>
       )}
-      <div className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[290px_minmax(0,1fr)_minmax(400px,0.9fr)]">
+      <main id="main" className="grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-cols-[290px_minmax(0,1fr)_minmax(400px,0.9fr)]">
+        <h1 className="sr-only">{owner === LOCAL_OWNER ? repo : `${owner}/${repo}`}: map, tours and code</h1>
+        {/* The map holds many tab stops: this jumps straight to the step and its code. */}
+        <a href="#step" className="sr-only z-50 rounded-md bg-trail px-3 py-2 font-mono text-sm text-[#16171a] focus:not-sr-only focus:fixed focus:top-16 focus:left-3">
+          Skip to the step and code
+        </a>
         {sideOpen && <button aria-label="Close" tabIndex={-1} onClick={closeSide} className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] lg:hidden" />}
         {/* A column on desktop; on phones and tablets a drawer opened from the header. */}
         <aside
@@ -897,7 +966,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
             ledger={ledger}
             activeTourId={tour?.id ?? null}
             tracing={tracing}
-            onOpenTour={picked((id: string) => {
+            onOpenTour={leaving((id: string) => {
               leaveThreadUnless(id);
               setPlaying(false);
               setDocPage(null);
@@ -905,27 +974,62 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
               // Back to a tour already seen: where it was left, not playing.
               void openTour(id, stepOf.current.get(id) ?? 0);
             })}
-            onTrace={picked((q: string) => {
+            onTrace={leaving((q: string) => {
               setThread(null);
               void trace(q);
             })}
             answers={answers}
             activeAnswerId={answer?.stored?.id ?? null}
-            onOpenAnswer={picked((id: string) => {
+            onOpenAnswer={leaving((id: string) => {
               leaveThreadUnless(id);
               void openAnswer(id);
             })}
             onAsk={ask}
             docsPages={docs?.pages ?? null}
             docsBusy={docsBusy}
-            onDocs={picked((node?: string) => void openDocs(node))}
+            onDocs={leaving((node?: string) => void openDocs(node))}
             pulls={pulls}
             activePull={tour?.pull?.number ?? null}
             threads={threads}
             activeThreadId={thread?.id ?? null}
-            onOpenThread={picked((id: string) => void openThread(id))}
+            onOpenThread={leaving((id: string) => void openThread(id))}
             seen={seen}
+            onTourUrl={async (url) => {
+              try {
+                const r = await api<{ tour: Tour; tours: TourIndexEntry[] }>("/api/tour/url", { ...at(summary), url });
+                setTours(r.tours);
+                setThread(null);
+                setViewFile(null);
+                setSelected(null);
+                setTour(r.tour);
+                setTourFromCache(true);
+                setStep(0);
+                setSideOpen(false);
+                announce(`Tour opened: ${r.tour.title}, ${r.tour.steps.length} steps.`);
+                return null;
+              } catch (e) {
+                if (needsSignIn(e)) setSignIn(true);
+                return (e as Error).message;
+              }
+            }}
+            carry={carry}
+            onCarry={async () => {
+              try {
+                const r = await api<{ carried: { from: string; count: number } | null; tours: TourIndexEntry[] }>("/api/tour/carry", at(summary));
+                setTours(r.tours);
+                setCarry(null);
+                announce(r.carried ? `${r.carried.count} ${r.carried.count === 1 ? "tour" : "tours"} brought over and checked against this commit.` : "No tours to bring over.");
+              } catch (e) {
+                announce((e as Error).message);
+              }
+            }}
+            onResetProgress={() => {
+              if (!seenKey) return;
+              setSeen(resetSeen(seenKey));
+              announce("Tour progress cleared.");
+            }}
             onWrite={picked(() => {
+              if (draft?.steps.length && !window.confirm("Start a new tour? The one you're writing will be discarded.")) return;
               setPlaying(false);
               setDraftError(null);
               setDraft({ title: "", summary: "", steps: [] });
@@ -934,12 +1038,9 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
         </aside>
 
         <p className="sr-only" aria-live="polite">
-          {tour && current ? `Step ${step + 1} of ${tour.steps.length}: ${current.title}. ${current.file}, lines ${current.startLine} to ${current.endLine}.` : ""}
+          {tour && current ? `Step ${step + 1} of ${tour.steps.length}: ${current.title}.${current.file ? ` ${current.file}, lines ${current.startLine} to ${current.endLine}.` : ""}` : ""}
         </p>
         <section aria-label="Map of the repository" className={`relative order-2 border-t border-line lg:order-2 lg:h-auto lg:min-h-0 lg:border-t-0 ${mapBig ? "h-[78vh]" : "h-[42vh]"}`}>
-          <button onClick={() => setMapBig((b) => !b)} className="absolute top-14 left-3 z-10 inline-flex items-center gap-1.5 rounded-[9px] border border-line bg-panel/90 px-2.5 py-1.5 font-mono text-[11px] text-fg-2 lg:hidden">
-            {mapBig ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />} {mapBig ? "Smaller map" : "Bigger map"}
-          </button>
           <TrailGraph
             atlas={atlas}
             summary={summary}
@@ -948,6 +1049,15 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
             selected={selected?.id ?? null}
             onGroupLayers={groupLayers}
             siteUrl={siteUrl}
+            toolbarExtra={
+              <button
+                onClick={() => setMapBig((b) => !b)}
+                aria-pressed={mapBig}
+                className="inline-flex items-center gap-1.5 rounded-[9px] border border-line bg-panel/90 px-2.5 py-1.5 font-mono text-[11px] text-fg-2 lg:hidden"
+              >
+                {mapBig ? <Minimize2 className="size-3.5" aria-hidden /> : <Maximize2 className="size-3.5" aria-hidden />} {mapBig ? "Smaller map" : "Bigger map"}
+              </button>
+            }
             callsFile={callsFile}
             onCallsFile={setCallsFile}
             onOpenCode={(file, line) => {
@@ -983,11 +1093,11 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
           />
         </section>
 
-        <section aria-label="Current step and code" className="relative order-1 flex min-h-0 flex-col gap-4 p-4 lg:order-3 lg:overflow-hidden lg:border-l lg:border-line">
+        <section id="step" tabIndex={-1} aria-label="Current step and code" className="outline-none relative order-1 flex min-h-0 flex-col gap-4 p-4 lg:order-3 lg:overflow-hidden lg:border-l lg:border-line">
           {/* The explanation scrolls on its own (half the column when code is shown), so the code and the player stay put. */}
           <div className={`relative flex flex-col gap-4 lg:-mx-1 lg:min-h-0 lg:overflow-y-auto lg:px-1 ${codePath ? "lg:max-h-[52%] lg:shrink-0" : "lg:flex-1"}`}>
           {tracing && !pullLive && (
-            <div className="flex items-center gap-3 rounded-card border border-trail/40 bg-trail-soft px-4 py-3">
+            <div role="status" className="flex items-center gap-3 rounded-card border border-trail/40 bg-trail-soft px-4 py-3">
               <Loader2 className="size-4 shrink-0 animate-spin text-trail" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-fg">{docsBusy || !answer ? tracing : `Answering: ${tracing}`}</p>
@@ -1014,7 +1124,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
             <TourEditor
               draft={draft}
               onChange={setDraft}
-              onScreen={codePath ? { file: codePath, start: highlight.start ?? 1, end: highlight.end ?? Math.max(highlight.start ?? 1, 15) } : null}
+              onScreen={codePath && highlight.start ? { file: codePath, start: highlight.start, end: highlight.end ?? highlight.start } : null}
               onShow={(s: DraftStep) => setViewFile({ path: s.file, line: s.startLine, end: s.endLine })}
               onCancel={() => {
                 setDraft(null);
@@ -1026,7 +1136,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
                 setDraftSaving(true);
                 setDraftError(null);
                 try {
-                  const r = await api<{ tour: Tour; tours: TourIndexEntry[] }>("/api/tour/custom", { ...at(summary), title: draft.title, summary: draft.summary, steps: draft.steps });
+                  const r = await api<{ tour: Tour; tours: TourIndexEntry[] }>("/api/tour/custom", { ...at(summary), title: draft.title, summary: draft.summary, steps: draft.steps.map(({ key: _key, ...st }) => ({ ...st, startLine: Math.min(st.startLine, st.endLine), endLine: Math.max(st.startLine, st.endLine) })) });
                   setTours(r.tours);
                   setDraft(null);
                   setViewFile(null);
@@ -1104,6 +1214,9 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
                   <BookOpen className="size-3.5" /> Open its docs page
                 </button>
               )}
+              <button onClick={() => copyPrompt({ module: selectedModule.id })} className="mt-2 inline-flex items-center gap-1.5 font-mono text-[11.5px] text-trail hover:underline">
+                <MessageSquareText className="size-3.5" /> Copy as a prompt for an AI chat
+              </button>
               <ul className="mt-3 space-y-0.5">
                 {selectedModule.files.map((f) => (
                   <li key={f}>
@@ -1117,6 +1230,15 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
                   </li>
                 ))}
               </ul>
+              <ModuleLinks
+                id={selectedModule.id}
+                atlas={atlas}
+                summary={summary}
+                onPick={(link) => {
+                  setSelected(null);
+                  setEvidence(link);
+                }}
+              />
             </div>
           ) : selected?.kind === "file" ? (
             <div className="flex items-center justify-between gap-2">
@@ -1143,6 +1265,8 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
                 fromCache={answer.fromCache}
                 onOpen={(file, start) => setViewFile({ path: file, line: start })}
                 at={summary}
+                onPrompt={answer.stored ? () => copyPrompt({ answer: answer.stored! }) : undefined}
+                stage={answer.streaming ? answer.stage : undefined}
               />
               {answer.stored && !answer.streaming && (
                 <ThreadView
@@ -1161,27 +1285,31 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
           ) : tour && current ? (
             <>
               {tour.pull && <PullHeader facts={tour.pull} compact />}
-              <Narration
-                tour={tour}
-                atlas={atlas}
-                step={step}
-                fromCache={tourFromCache}
-                onShare={() => setCardOpen(true)}
-                onExport={() => downloadCodeTour(tour, summary)}
-                onTranscript={() => setDialog("transcript")}
-                onReceipt={() => setCostOpen(true)}
-                onEdit={() => {
-                  setPlaying(false);
-                  setDraftError(null);
-                  setDraft({
-                    basedOn: tour.id,
-                    title: `${tour.title} (my version)`,
-                    summary: tour.summary,
-                    steps: tour.steps.map((s) => ({ file: s.file, startLine: s.startLine, endLine: s.endLine, title: s.title, narration: s.narration })),
-                  });
-                }}
-                next={nextTour}
-              />
+              <RichContext.Provider value={richLinks}>
+                <Narration
+                  tour={tour}
+                  atlas={atlas}
+                  step={step}
+                  fromCache={tourFromCache}
+                  onShare={() => setCardOpen(true)}
+                  onExport={() => downloadCodeTour(tour, summary, nextTour?.title)}
+                  onTranscript={() => setDialog("transcript")}
+                  onReceipt={() => setCostOpen(true)}
+                  onEdit={() => {
+                    setPlaying(false);
+                    setDraftError(null);
+                    setDraft({
+                      basedOn: tour.id,
+                      title: `${tour.title} (my version)`,
+                      summary: tour.summary,
+                      steps: tour.steps.map((s) => ({ file: s.file, startLine: s.startLine, endLine: s.endLine, title: s.title, narration: s.narration })),
+                    });
+                  }}
+                  onPrompt={() => copyPrompt({ tour })}
+                  next={nextTour}
+                  prev={prevTour}
+                />
+              </RichContext.Provider>
               {tour.review && <ReviewNotes notes={tour.review} onOpen={(file, line) => setViewFile({ path: file, line })} />}
               {!tour.pull && (
                 <ThreadView key={tour.id} summary={summary} thread={thread} activeRef={tour.id} followUps={tour.followUps ?? []} busy={!!tracing} onTurn={(t) => openTurn(t)} onAsk={followUp} />
@@ -1200,7 +1328,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
             )
           )}
 
-          <button onClick={() => setBrowse((b) => !b)} className="self-start font-mono text-[11px] tracking-[0.08em] text-fg-3 hover:text-fg">
+          <button id="files-toggle" onClick={() => setBrowse((b) => !b)} aria-expanded={browse} className="self-start font-mono text-[11px] tracking-[0.08em] text-fg-3 hover:text-fg">
             {browse ? "hide files" : "browse & search files · press /"}
           </button>
           {browse && (
@@ -1213,10 +1341,12 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
                 setSelected({ id: path, kind: "file" });
                 setPlaying(false);
               }}
-              onClose={() => setBrowse(false)}
+              onClose={() => {
+                setBrowse(false);
+                document.getElementById("files-toggle")?.focus();
+              }}
             />
           )}
-
           </div>
 
           {codePath && (
@@ -1266,7 +1396,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
             </div>
           )}
         </section>
-      </div>
+      </main>
       {drawers}
       {cardOpen && tour && <TrailCardModal summary={summary} tour={tour} onClose={() => setCardOpen(false)} />}
       {signIn && <SignInModal onClose={() => setSignIn(false)} />}
@@ -1276,8 +1406,41 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   );
 }
 
+/** A module's links, in and out, each opening the import lines behind it: the map's links without the map. */
+function ModuleLinks({ id, atlas, summary, onPick }: { id: string; atlas: Atlas; summary: RepoSummary; onPick: (link: LinkInfo) => void }) {
+  const links = architectureSpec(atlas, { files: summary }).edges.filter((e) => e.from === id || e.to === id);
+  if (!links.length) return null;
+  const label = (m: string) => atlas.nodes.find((n) => n.id === m)?.label ?? m;
+  return (
+    <div className="mt-4">
+      <h3 className="font-mono text-[10.5px] tracking-[0.15em] text-fg-3 uppercase">Links</h3>
+      <ul className="mt-1.5 space-y-0.5">
+        {links.map((l) => (
+          <li key={`${l.from}>${l.to}`}>
+            <button
+              onClick={() =>
+                onPick({
+                  from: l.from,
+                  to: l.to,
+                  label: plainLabel(l.label ?? ""),
+                  verified: l.verified,
+                  evidence: l.evidence ?? [],
+                })
+              }
+              className="w-full rounded px-1.5 py-1 text-left text-[12.5px] text-fg-2 hover:bg-raised"
+            >
+              {l.from === id ? `→ ${label(l.to)}` : `← ${label(l.from)}`}{" "}
+              <span className="font-mono text-[11px] text-fg-3">{l.verified ? `${l.evidence?.length ?? 0} ${l.evidence?.length === 1 ? "import" : "imports"}` : "inferred"}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** A link on the map, and the import lines in the code that back it. */
-function EvidencePanel({ route, atlas, onOpen, onClose }: { route: Route; atlas: Atlas; onOpen: (file: string, line?: number) => void; onClose: () => void }) {
+function EvidencePanel({ route, atlas, onOpen, onClose }: { route: LinkInfo; atlas: Atlas; onOpen: (file: string, line?: number) => void; onClose: () => void }) {
   const name = (id: string) => (id.includes("::") ? id.slice(id.indexOf("::") + 2) : (atlas.nodes.find((n) => n.id === id)?.label ?? id));
   return (
     <div>
@@ -1326,12 +1489,18 @@ function StopButton({ onStop }: { onStop: () => void }) {
 }
 
 function ProblemNote({ problem, onDismiss }: { problem: Problem; onDismiss: () => void }) {
+  // After Stop, focus lands on "Start again" instead of being lost with the Stop button.
+  const again = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (problem.stopped) again.current?.focus();
+  }, [problem]);
   return (
     <div role="alert" className={`flex w-full max-w-[1240px] items-start gap-2 rounded-card border bg-panel px-4 py-3 text-sm text-fg-2 ${problem.stopped ? "border-line" : "border-danger/40"}`}>
       {problem.stopped ? <Square className="mt-1 size-3 shrink-0 fill-current text-fg-3" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />}
       <span className="min-w-0 flex-1">{problem.text}</span>
       {problem.retry && (
         <button
+          ref={again}
           onClick={() => {
             onDismiss();
             problem.retry?.();
@@ -1359,7 +1528,8 @@ function TrailCardModal({ summary, tour, onClose }: { summary: RepoSummary; tour
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         <button
           onClick={() =>
-            navigator.clipboard?.writeText(window.location.href).then(() => {
+            copyText(window.location.href, "Link copied").then((ok) => {
+              if (!ok) return;
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             })

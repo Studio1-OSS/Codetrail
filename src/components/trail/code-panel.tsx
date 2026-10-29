@@ -3,6 +3,7 @@
 import { Check, Copy, ExternalLink, FileCode2, GitCompareArrows, Milestone, Workflow } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lineRanges, patchLines } from "@/lib/diff";
+import { copyText } from "@/lib/announce";
 import { blobUrl, LOCAL_OWNER } from "@/lib/ref";
 import type { TourMark } from "@/server/trail/service";
 
@@ -171,7 +172,8 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [
         : start && end && text
           ? text.split("\n").slice(start - 1, end).join("\n")
           : (text ?? "");
-    navigator.clipboard?.writeText(body).then(() => {
+    copyText(body, what === "path" ? "Path copied" : "Code copied").then((ok) => {
+      if (!ok) return;
       setCopied(what);
       setTimeout(() => setCopied(null), 1500);
     });
@@ -204,21 +206,22 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [
                 });
               }}
               aria-pressed={showMarks}
+              aria-label={`Tour stops in this file: ${marks.length}. ${showMarks ? "Shown" : "Hidden"}.`}
               title={`${showMarks ? "Hide" : "Show"} where tours stop in this file (${marks.length} ${marks.length === 1 ? "step" : "steps"})`}
-              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showMarks ? "text-trail" : "text-[#7a7d86] hover:text-[#eeece6]"}`}
+              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showMarks ? "text-trail" : "text-[#9a9ca6] hover:text-[#eeece6]"}`}
             >
               <Milestone className="size-3" /> {marks.length}
             </button>
           )}
           {onCalls && (
-            <button onClick={onCalls} title="Show the functions in this file and what they call" className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6]">
+            <button onClick={onCalls} title="Show the functions in this file and what they call" className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#9a9ca6] hover:text-[#eeece6]">
               <Workflow className="size-3" /> calls
             </button>
           )}
-          <button onClick={() => copy("code")} title={start && end ? `Copy lines ${start}–${end}` : "Copy the whole file"} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6]">
+          <button onClick={() => copy("code")} title={start && end ? `Copy lines ${start}–${end}` : "Copy the whole file"} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#9a9ca6] hover:text-[#eeece6]">
             {copied === "code" ? <Check className="size-3 text-ok" /> : <Copy className="size-3" />} {copied === "code" ? "copied" : "copy"}
           </button>
-          <button onClick={() => copy("path")} title="Copy the path and line range" className="hidden items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6] sm:inline-flex">
+          <button onClick={() => copy("path")} title="Copy the path and line range" className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#9a9ca6] hover:text-[#eeece6]">
             {copied === "path" ? "copied" : "path"}
           </button>
         </span>
@@ -227,7 +230,7 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [
             onClick={() => setShowDiff((d) => !d)}
             aria-pressed={showDiff}
             title={showDiff ? "Show the file as the PR leaves it" : "Show this file's diff"}
-            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showDiff ? "text-[#eeece6]" : "text-[#7a7d86] hover:text-[#eeece6]"}`}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] ${showDiff ? "text-[#eeece6]" : "text-[#9a9ca6] hover:text-[#eeece6]"}`}
           >
             <GitCompareArrows className="size-3" /> {showDiff ? "file" : "diff"}
           </button>
@@ -237,7 +240,7 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [
             href={github}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#7a7d86] hover:text-[#eeece6]"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-mono text-[11px] text-[#9a9ca6] hover:text-[#eeece6]"
           >
             GitHub <ExternalLink className="size-3" />
           </a>
@@ -262,10 +265,10 @@ export function CodePanel({ owner, repo, sha, path, start, end, patch, marks = [
                   onClick={() => onMark?.(p.marks[0])}
                   title={p.marks.map((m) => `Tour: ${m.tourTitle} · step ${m.step + 1}: ${m.title}`).join("\n")}
                   aria-label={`Tour stop: ${p.marks.map((m) => `${m.tourTitle}, step ${m.step + 1}`).join("; ")}. Opens the tour there.`}
-                  className="group absolute left-0 w-2.5"
-                  style={{ top: p.top, height: p.height }}
+                  className="group absolute left-0 min-h-6 w-6"
+                  style={{ top: p.top, height: Math.max(24, p.height) }}
                 >
-                  <span className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-trail/70 group-hover:bg-trail" />
+                  <span className="absolute inset-y-0 left-0 w-[4px] rounded-r bg-trail/80 group-hover:w-[6px] group-hover:bg-trail group-focus-visible:w-[6px]" />
                   {p.marks.length > 1 && <span className="absolute top-0 left-[5px] font-mono text-[9px] leading-none text-trail">{p.marks.length}</span>}
                 </button>
               ))}

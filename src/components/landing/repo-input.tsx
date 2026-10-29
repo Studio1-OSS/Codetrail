@@ -23,6 +23,9 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
     router.push(repoPath(ref));
   }
 
+  // What the box holds, once it reads as a repo (shown, not acted on: Enter opens it).
+  const parsed = value.trim() ? parseRepoInput(value) : null;
+  const recognised = parsed ? `${parsed.owner}/${parsed.repo}${parsed.pull ? ` pull request #${parsed.pull}` : parsed.ref ? ` at ${parsed.ref}` : ""}` : null;
   return (
     <form onSubmit={submit} className="w-full max-w-[640px]">
       <label htmlFor="repo-link" className="mb-2 block font-mono text-[11px] tracking-[0.2em] text-fg-3 uppercase">
@@ -36,16 +39,8 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
             setValue(e.target.value);
             setError(null);
           }}
-          onPaste={(e) => {
-            // A pasted link opens the repo right away.
-            const text = e.clipboardData.getData("text");
-            const ref = parseRepoInput(text);
-            if (ref) {
-              e.preventDefault();
-              setValue(text.trim());
-              router.push(repoPath(ref));
-            }
-          }}
+          aria-invalid={!!error}
+          aria-describedby="repo-link-help"
           autoFocus={autoFocus}
           spellCheck={false}
           autoCapitalize="off"
@@ -59,9 +54,17 @@ export function RepoInput({ autoFocus }: { autoFocus?: boolean }) {
         </button>
       </div>
       {error ? (
-        <p className="mt-2 text-sm text-danger">{error}</p>
+        <p id="repo-link-help" role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      ) : recognised ? (
+        <p id="repo-link-help" className="mt-2.5 text-[13px] text-fg-2">
+          {recognised}: press Enter to open it.
+        </p>
       ) : (
-        <p className="mt-2.5 text-[13px] text-fg-3">Repo, branch or file link · or swap github.com for this site in the address bar</p>
+        <p id="repo-link-help" className="mt-2.5 text-[13px] text-fg-3">
+          Repo, branch, file or pull-request link · or swap github.com for this site in the address bar
+        </p>
       )}
     </form>
   );

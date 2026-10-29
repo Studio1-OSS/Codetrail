@@ -8,7 +8,7 @@ import { docsToMarkdown, type Docs } from "@/lib/docs-schema";
 import { atlasToMermaid } from "@/lib/export-map";
 import { formatTokens } from "@/lib/format";
 import { blobUrl, mdLink } from "@/lib/ref";
-import type { Atlas, RepoSummary, Tour, TourIndexEntry } from "@/lib/schemas";
+import { onCode, type Atlas, type RepoSummary, type Tour, type TourIndexEntry } from "@/lib/schemas";
 import type { RepoInfo } from "@/server/repo/github";
 import { getJSON } from "@/server/store";
 import { storeKey, type ReadEntry } from "./service";
@@ -58,7 +58,7 @@ export async function repoMarkdown(at: At, site: string, summary?: Pick<RepoSumm
     out.push("## Tours", "");
     for (const t of tours) {
       out.push(`### ${t.title}`, "", `> ${t.question}`, "", ...(t.summary ? [t.summary, ""] : []));
-      t.steps.forEach((s, i) => out.push(`${i + 1}. **${s.title}** (${link(s.file, s.startLine, s.endLine)}): ${s.narration}`));
+      t.steps.forEach((s, i) => out.push(`${i + 1}. **${s.title}**${onCode(s) ? ` (${link(s.file, s.startLine, s.endLine)})` : ""}: ${s.narration}`));
       out.push("", `Open it step by step: ${page}?tour=${t.id}`, "");
     }
   }

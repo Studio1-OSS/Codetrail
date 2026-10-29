@@ -45,6 +45,8 @@ type Props = {
   edgeLabels?: "all" | "focus";
   minRadius?: number;
   maxRadius?: number;
+  /** Search matches: lit, the rest dimmed. */
+  highlight?: Set<string> | null;
 };
 // Small nodes keep their caption for hover, the tour and selection, so a big file graph stays readable.
 const CAPTION_MIN_R = 16;
@@ -64,7 +66,7 @@ function curve(s: SimNode, t: SimNode, bend: number) {
   return { d: `M${sx},${sy} Q${mx},${my} ${ex},${ey}`, lx: (sx + 2 * mx + ex) / 4, ly: (sy + 2 * my + ey) / 4, angle: (Math.atan2(ey - sy, ex - sx) * 180) / Math.PI };
 }
 
-export function GraphView({ nodes, edges, active, previous, visited, changed, selected, onSelect, edgeLabels = "focus", minRadius = 18, maxRadius = 46 }: Props) {
+export function GraphView({ nodes, edges, active, previous, visited, changed, selected, onSelect, edgeLabels = "focus", minRadius = 18, maxRadius = 46, highlight }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
@@ -204,7 +206,27 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
   const zoomBy = (factor: number) => {
     const svg = svgRef.current;
     const z = zoomRef.current;
-    if (svg && z) select(svg).transition().duration(250).call(z.scaleBy, factor);
+    if (svg && z) select(svg).transition().duration(still ? 0 : 250).call(z.scaleBy, factor);
+  };
+  // Focus that came from a click, not the keyboard: the arrows then keep stepping the tour instead of panning.
+  const clicked = useRef(false);
+  /** + − 0 zoom and fit; the arrows pan when the graph itself (not a node) has keyboard focus. */
+  const onKey = (e: React.KeyboardEvent) => {
+    const svg = svgRef.current;
+    const z = zoomRef.current;
+    if (!svg || !z || e.ctrlKey || e.metaKey || e.altKey) return;
+    const onNode = (e.target as Element).closest?.("g[data-id]") || clicked.current;
+    const pan = (dx: number, dy: number) => select(svg).call(z.translateBy, dx / transform.k, dy / transform.k);
+    if (e.key === "+" || e.key === "=") zoomBy(1.25);
+    else if (e.key === "-" || e.key === "_") zoomBy(1 / 1.25);
+    else if (e.key === "0") fit();
+    else if (!onNode && e.key === "ArrowLeft") pan(60, 0);
+    else if (!onNode && e.key === "ArrowRight") pan(-60, 0);
+    else if (!onNode && e.key === "ArrowUp") pan(0, 60);
+    else if (!onNode && e.key === "ArrowDown") pan(0, -60);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
   };
   const fit = () => {
     const svg = svgRef.current;
@@ -263,7 +285,17 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <svg ref={svgRef} className="h-full w-full touch-pan-y select-none lg:touch-none" role="group" aria-label="Graph of the repository. Tab through the nodes; Enter opens one." onClick={(e) => e.target === svgRef.current && onSelect(null)}>
+      <svg
+        ref={svgRef}
+        className="h-full w-full touch-pan-y select-none lg:touch-none"
+        role="group"
+        tabIndex={0}
+        aria-label="Graph of the repository. Tab through the nodes; Enter selects one. Plus and minus zoom, 0 fits, arrows pan."
+        onKeyDown={onKey}
+        onPointerDown={() => (clicked.current = true)}
+        onBlur={(e) => !svgRef.current?.contains(e.relatedTarget as Node | null) && (clicked.current = false)}
+        onClick={(e) => e.target === svgRef.current && onSelect(null)}
+      >
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="#8a88a0" />
@@ -349,7 +381,8 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
             const isActive = n.id === active;
             const steps = visited.get(n.id);
             const lit = !focus || neighbours.has(n.id);
-            const dim = !lit || (touring && !steps && !isActive && !focus);
+            const found = highlight?.size ? highlight.has(n.id) : null;
+            const dim = found === false || !lit || (touring && !steps && !isActive && !focus);
             const label = n.label.length > 26 ? `${n.label.slice(0, 25)}…` : n.label;
             return (
               <g
@@ -357,7 +390,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
                 data-id={n.id}
                 transform={`translate(${n.x},${n.y})`}
                 className="cursor-pointer"
-                opacity={dim ? 0.28 : 1}
+                opacity={dim ? (found === false ? 0.22 : 0.4) : 1}
                 onMouseEnter={() => setHover(n.id)}
                 onMouseLeave={() => setHover((h) => (h === n.id ? null : h))}
                 onClick={(e) => {
@@ -372,7 +405,7 @@ export function GraphView({ nodes, edges, active, previous, visited, changed, se
                 role="button"
                 tabIndex={0}
                 aria-pressed={n.id === selected}
-                aria-label={`${n.label}${n.kind ? `, ${n.kind}` : ""}${changed?.has(n.id) ? ", changed in this pull request" : ""}${steps ? `, tour steps ${steps.join(", ")}` : ""}${isActive ? ", current step" : ""}`}
+                aria-label={`${n.label}${found ? ", matches your search" : ""}${n.kind ? `, ${n.kind}` : ""}${changed?.has(n.id) ? ", changed in this pull request" : ""}${steps ? `, tour steps ${steps.join(", ")}` : ""}${isActive ? ", current step" : ""}`}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();

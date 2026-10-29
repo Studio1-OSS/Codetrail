@@ -19,7 +19,7 @@ export default async function BrowsePage() {
   return (
     <div className="min-h-dvh bg-ink text-fg">
       <SiteHeader />
-      <main className="mx-auto max-w-[1240px] px-4 pt-10 pb-20 sm:px-6">
+      <main id="main" className="mx-auto max-w-[1240px] px-4 pt-10 pb-20 sm:px-6">
         <h1 className="font-display text-[40px] leading-none font-light tracking-[-0.05em] [font-stretch:78%] sm:text-[56px]">
           Browse <span className="font-extrabold text-trail [font-stretch:110%]">repos.</span>
         </h1>

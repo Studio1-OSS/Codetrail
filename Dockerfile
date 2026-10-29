@@ -12,6 +12,8 @@ ENV NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 FROM node:22-slim
+# The diagram PNG's labels are SVG text drawn with system fonts; the slim image ships none.
+RUN apt-get update && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 \
     DATABASE_URL=file:/data/codetrail.db LOCAL_ROOT=/repos

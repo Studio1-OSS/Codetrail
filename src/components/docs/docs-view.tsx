@@ -2,7 +2,7 @@
 
 // Written docs, wiki-style: one page per module, with checked key files and code references that open in the
 // code panel, and the whole set downloadable as Markdown.
-import { Check, CornerUpRight, Download, X } from "lucide-react";
+import { Check, CornerUpRight, Download, Presentation, X } from "lucide-react";
 import { Rich } from "@/components/rich";
 import { docsToMarkdown, type Docs } from "@/lib/docs-schema";
 import { useEffect, useMemo } from "react";
@@ -45,7 +45,7 @@ export function DocsView({ docs, atlas, summary, page, onPage, onOpen, onClose }
   const spec = useMemo(() => (node ? neighbourhoodSpec(atlas, summary, node) : null), [atlas, summary, node]);
   // Esc closes the docs, unless something on top of them (a dialog, a menu) is taking it.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector("[role=dialog]") && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector("[role=dialog]") && !(e.target as HTMLElement | null)?.closest?.("input, textarea, [role=menu]") && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -64,6 +64,11 @@ export function DocsView({ docs, atlas, summary, page, onPage, onOpen, onClose }
               <Download className="size-3" /> {x.label}
             </button>
           ))}
+          {!summary.scope && (
+            <a href={`/${summary.owner}/${summary.repo}/slides?sha=${summary.sha}`} title="The architecture, every module and the main tour as slides" className="inline-flex items-center gap-1.5 rounded-[8px] border border-line px-2 py-1 font-mono text-[10.5px] text-fg-2 hover:border-outline hover:text-fg">
+              <Presentation className="size-3" /> Slides
+            </a>
+          )}
           <button onClick={onClose} aria-label="Close the docs" className="rounded p-1 text-fg-3 hover:text-fg">
             <X className="size-3.5" />
           </button>

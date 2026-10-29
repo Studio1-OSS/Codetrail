@@ -1,6 +1,7 @@
 // A real-usage demo of Codetrail, driven in a browser against the running app:
-//   paste a repo link → what will be read and what it costs → the live read → the first tour → a question →
-//   a suggested follow-up → the docs → the receipt.
+//   paste a repo link → what will be read and what it costs → the live read → the first tour → finding on the map
+//   and the map as text → a question → a suggested follow-up → the docs → their slides → the receipt → a Research
+//   answer, with its plan and rounds.
 //
 //   pnpm demo:test     # run the flow and check it, with screenshots; nothing is recorded
 //   pnpm demo:record   # the same flow, recorded to docs/demo.mp4 and docs/demo.gif
@@ -9,6 +10,8 @@
 // DEMO_REPO and DEMO_QUESTION pick what to read and ask (a repo nobody has read yet shows the live build; one
 // already read replays for free). Waiting for the model is sped up in the video; everything else plays at real
 // speed. Set CHROME_PATH to use a specific Chrome/Chromium and DEMO_URL if the app isn't on localhost:3000.
+// DEMO_THEME=light records the light theme; DEMO_OUT sets the output path without extension (default docs/demo);
+// DEMO_RESEARCH is the stored Research answer to end on (a path on the app; empty to skip).
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -24,8 +27,11 @@ const W = 1600;
 const H = 900; // headless Chrome caps the page area at ~907px tall
 // Nothing on screen for longer than this is dead time, and is cut to this.
 const MAX_HOLD = 2.5;
-const OUT_MP4 = "docs/demo.mp4";
-const OUT_GIF = "docs/demo.gif";
+const THEME = process.env.DEMO_THEME === "light" ? "light" : "dark";
+const OUT = process.env.DEMO_OUT || "docs/demo";
+const OUT_MP4 = `${OUT}.mp4`;
+const OUT_GIF = `${OUT}.gif`;
+const RESEARCH = process.env.DEMO_RESEARCH ?? "/lukeed/polka?answer=d24287f5297b";
 const work = process.env.DEMO_WORK
   ? (ASSEMBLE_ONLY || fs.rmSync(process.env.DEMO_WORK, { recursive: true, force: true }), fs.mkdirSync(process.env.DEMO_WORK, { recursive: true }), process.env.DEMO_WORK)
   : fs.mkdtempSync(path.join(os.tmpdir(), "codetrail-demo-"));
@@ -41,7 +47,7 @@ if (ASSEMBLE_ONLY) {
 
 // --- browser, cursor, recording ---
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
-const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: "dark" });
+const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, colorScheme: THEME });
 const page = await ctx.newPage();
 const errors: string[] = [];
 page.on("pageerror", (e) => errors.push(String(e)));
@@ -154,6 +160,21 @@ await shot("3-tour");
 await click(page.getByRole("tab", { name: /files/i }), 2400);
 await click(page.getByRole("tab", { name: /modules/i }), 900);
 
+// --- 4b. find on the map, and the map as text ---
+await click(page.getByRole("tab", { name: /architecture/i }), 900);
+await click(page.locator("#map-find"), 300);
+await typeHuman("router");
+await pause(1400);
+await page.keyboard.press("Enter");
+await pause(1600);
+check("find lights up matches on the map", (await page.locator("#map-find").inputValue()) === "router");
+await page.locator("#map-find").fill("");
+await click(page.getByRole("button", { name: "List", exact: true }), 1800);
+await wheel(page.locator("#map-panel"), 360, 1100);
+check("the map reads as a list", await page.getByRole("button", { name: "List", exact: true }).getAttribute("aria-pressed").then((v) => v === "true"));
+await shot("3b-list");
+await click(page.getByRole("button", { name: "List", exact: true }), 900);
+
 // --- 5. ask a question ---
 const ask = page.getByLabel("Ask how something works");
 await click(ask, 300);
@@ -194,11 +215,41 @@ await wheel(page.locator("#doc-title"), 420, 1300);
 check("the docs opened", await page.locator("#doc-title").isVisible());
 await shot("6-docs");
 
+// --- 7b. the docs as slides ---
+const slides = page.getByRole("link", { name: "Slides" });
+if (await slides.count()) {
+  await click(slides, 0);
+  await page.waitForURL(/\/slides/, { timeout: 60_000 });
+  await pause(1800);
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("ArrowRight");
+    await pause(1700);
+  }
+  check("the slides step through", /#4$/.test(page.url()));
+  await shot("6b-slides");
+  await page.goBack();
+  await page.locator("#doc-title").waitFor({ timeout: 60_000 }).catch(() => {});
+  await pause(1200);
+}
+
 // --- 8. the receipt ---
 await click(page.locator("header button").filter({ hasText: /calls/ }).first(), 3800);
 await shot("7-receipt");
 await page.keyboard.press("Escape");
 await pause(1200);
+
+// --- 9. a Research answer: the plan and the rounds behind it ---
+if (RESEARCH) {
+  await page.goto(`${URL}${RESEARCH}`, { waitUntil: "networkidle" });
+  await waitFor(2, () => page.getByText(/How it was researched/).waitFor({ timeout: 120_000 }));
+  await pause(1500);
+  await wheel(right.locator("h2").first(), 900, 1600);
+  await click(page.getByText("Plan", { exact: true }).first(), 1800);
+  await click(page.getByText("Round 1", { exact: true }).first(), 2200);
+  await wheel(right.locator("h2").first(), 420, 1300);
+  check("the Research answer shows its plan and rounds", await page.getByText(/How it was researched · \d+ rounds?/).isVisible());
+  await shot("8-research");
+}
 
 await browser.close();
 console.log(`errors in the page: ${errors.length ? errors.slice(0, 5).join(" | ") : "none"}`);

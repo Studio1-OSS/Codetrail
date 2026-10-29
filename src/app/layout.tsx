@@ -9,17 +9,17 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 const martian = Martian_Mono({ subsets: ["latin"], axes: ["wdth"], variable: "--font-martian" });
 
 const description =
-  "Paste any GitHub repo. DeepSeek V4.1 Flash 1017 reads every file at once, draws the architecture, writes the docs and walks you through how the code runs, line by checked line.";
+  "Paste any GitHub repo. DeepSeek V4.1 Flash 1017 reads every file at once and gives you an architecture diagram, wiki docs, guided code tours and answers about the code, with every reference checked.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(env.SITE_URL),
-  title: { default: "Codetrail: understand any GitHub repo, line by checked line", template: "%s · Codetrail" },
+  title: { default: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", template: "%s · Codetrail" },
   description,
   applicationName: "Codetrail",
-  keywords: ["code tour", "codebase walkthrough", "architecture diagram", "AI code docs", "GitHub repo explorer", "DeepSeek", "DeepWiki alternative", "GitDiagram alternative", "CodeTour", "MCP"],
+  keywords: ["code tour", "codebase walkthrough", "architecture diagram", "wiki", "codebase wiki", "repo docs", "AI code docs", "GitHub repo explorer", "DeepSeek", "DeepWiki alternative", "GitDiagram alternative", "CodeTour", "MCP"],
   alternates: { canonical: "/" },
-  openGraph: { type: "website", siteName: "Codetrail", url: "/", title: "Codetrail: diagram, docs, code tour and Q&A, in one link", description },
-  twitter: { card: "summary_large_image", title: "Codetrail: diagram, docs, code tour and Q&A, in one link", description },
+  openGraph: { type: "website", siteName: "Codetrail", url: "/", title: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", description },
+  twitter: { card: "summary_large_image", title: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", description },
 };
 
 export const viewport: Viewport = {
@@ -37,10 +37,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-dvh">
+        {/* Every page's <main> has id="main". */}
         <a href="#main" className="sr-only z-[100] rounded-md bg-trail px-3 py-2 font-mono text-sm text-[#16171a] focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
           Skip to content
         </a>
-        <div id="main">{children}</div>
+        {children}
       </body>
     </html>
   );

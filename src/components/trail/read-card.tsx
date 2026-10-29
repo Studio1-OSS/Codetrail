@@ -2,6 +2,7 @@
 
 import { FileSearch, Image as ImageIcon, Play, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { formatTokens, formatUsd, perMillion } from "@/lib/format";
 import { LOCAL_OWNER } from "@/lib/ref";
 import type { RepoSummary } from "@/lib/schemas";
@@ -246,15 +247,19 @@ export function Reading({ summary, label, live, onStop }: { summary: RepoSummary
   const [lastOutput, setLastOutput] = useState(0);
   const outputSize = (live?.chars ?? 0) + (live?.thinkingChars ?? 0);
   useEffect(() => setLastOutput(Date.now()), [outputSize]);
+  // The file list scrolls by as decoration; it stops for reduced motion, or when paused.
+  const still = useReducedMotion();
+  const [paused, setPaused] = useState(false);
   useEffect(() => {
     const started = Date.now();
     const t = setInterval(() => setElapsed((Date.now() - started) / 1000), 200);
-    const f = setInterval(() => setTick((x) => x + 1), 140);
-    return () => {
-      clearInterval(t);
-      clearInterval(f);
-    };
+    return () => clearInterval(t);
   }, []);
+  useEffect(() => {
+    if (still || paused) return;
+    const f = setInterval(() => setTick((x) => x + 1), 140);
+    return () => clearInterval(f);
+  }, [still, paused]);
   const expected = expectedSeconds(summary.tokens);
   const files = summary.read;
   const nodes = live?.nodes ?? [];
@@ -295,16 +300,22 @@ export function Reading({ summary, label, live, onStop }: { summary: RepoSummary
       <div className="mt-5 h-1 overflow-hidden rounded-full bg-line">
         <div className="indeterminate h-full w-1/3 rounded-full bg-trail" />
       </div>
-      {elapsed > QUIET_S && lastOutput && (Date.now() - lastOutput) / 1000 > QUIET_S && (
-        <p role="status" className="mt-2 font-mono text-[11.5px] text-fg-3">
-          Still working · no new output for {Math.round((Date.now() - lastOutput) / 1000)}s. Big repos can take a while before the first words.
-        </p>
-      )}
+      {/* Rounded to 5 seconds, so a screen reader hears it now and then, not five times a second. */}
+      <p role="status" className="mt-2 min-h-[1em] font-mono text-[11.5px] text-fg-3">
+        {elapsed > QUIET_S && lastOutput && (Date.now() - lastOutput) / 1000 > QUIET_S
+          ? `Still working · no new output for ${Math.floor((Date.now() - lastOutput) / 5000) * 5}s. Big repos can take a while before the first words.`
+          : ""}
+      </p>
+      <p className="sr-only" aria-live="polite">
+        {STAGES.find((x) => x.id === (stage === "writing" ? "thinking" : stage))?.text.replace(/ ·.*$/, "")}
+      </p>
 
       <div className="mt-8 flex flex-wrap gap-8">
         <div className="relative h-[460px] min-w-0 flex-[999_1_560px] overflow-hidden rounded-card border border-line dot-grid">
           {graphNodes.length > 0 ? (
-            <GraphView nodes={graphNodes} edges={graphEdges} active={null} previous={null} visited={new Map()} selected={null} onSelect={() => {}} edgeLabels="all" minRadius={22} maxRadius={22} />
+            <div aria-hidden inert className="h-full w-full">
+              <GraphView nodes={graphNodes} edges={graphEdges} active={null} previous={null} visited={new Map()} selected={null} onSelect={() => {}} edgeLabels="all" minRadius={22} maxRadius={22} />
+            </div>
           ) : (
             <div className="absolute inset-0 overflow-hidden p-5 font-mono text-[11.5px] leading-6 text-fg-3 [mask-image:linear-gradient(to_bottom,transparent,black_25%,black_75%,transparent)]">
               {files.length > 0 &&
@@ -322,6 +333,11 @@ export function Reading({ summary, label, live, onStop }: { summary: RepoSummary
           <p className="absolute bottom-3 left-4 font-mono text-[10.5px] tracking-[0.15em] text-fg-3 uppercase">
             {graphNodes.length ? "the map, as DeepSeek writes it" : "files going into one prompt"}
           </p>
+          {!graphNodes.length && !still && (
+            <button onClick={() => setPaused((p) => !p)} aria-pressed={paused} className="absolute right-3 bottom-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-fg-3 hover:text-fg">
+              {paused ? "Resume the list" : "Pause the list"}
+            </button>
+          )}
         </div>
 
         <div className="min-w-0 flex-[1_1_320px] space-y-6">
@@ -403,23 +419,30 @@ function FolderPicker({ summary }: { summary: RepoSummary }) {
   const all = summary.fileSizes.reduce((a, [, , t]) => a + t, 0) || 1;
   const p = summary.price;
   // The files kept, plus the rest of the prompt (instructions, the import graph, files sent as signatures).
-  const tokens = Math.round(kept + Math.max(0, summary.tokens - all));
-  const cost = p ? tokens * p.input + 8_000 * p.output : null;
+  // Patterns that match nothing in this commit (a typo, a folder that isn't there): named, and nothing is read.
+  const known = [...summary.fileSizes.map(([p]) => p), ...(summary.otherFiles ?? []).map(([p]) => p)];
+  const unmatched = draft ? [...draft.only, ...draft.skip].filter((pat) => !known.some((p) => inScope(p, { only: [pat], skip: [] }))) : [];
+  const empty = !!draft && !known.some((p) => inScope(p, draft));
+  const tokens = empty ? 0 : Math.round(kept + Math.max(0, summary.tokens - all));
+  const cost = p && !empty ? tokens * p.input + 8_000 * p.output : null;
   const changed = JSON.stringify(draft) !== JSON.stringify(current);
   if (!folders.length) return null;
   return (
     <section>
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full flex-wrap items-baseline justify-between gap-3 border-b border-line pb-3 text-left">
+      <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line pb-3">
         <h2 className="font-medium">Choose folders {current ? <span className="ml-2 font-mono text-[12px] text-trail">{scopeLabel(current)}</span> : null}</h2>
-        <span className="font-mono text-[12px] text-fg-3">{open ? "hide" : "read only part of the repo →"}</span>
-      </button>
+        <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="folder-picker" className="font-mono text-[12px] text-fg-3 hover:text-fg">
+          {open ? "Hide" : "Read only part of the repo →"}
+        </button>
+      </div>
       {open && (
-        <div className="mt-4 space-y-4">
+        <div id="folder-picker" className="mt-4 space-y-4">
           <p className="text-[13px] text-fg-3">Untick folders to leave them out, or name the only ones to read. A read of some folders is its own read: the full one stays as it is.</p>
           <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {folders.map((f) => {
               const parentOff = f.depth === 1 && skip.includes(f.dir.split("/")[0]);
-              const on = !skip.includes(f.dir) && !parentOff && inScope(`${f.dir}/x`, normalScope({ only: only.split(","), skip: [] }));
+              // A box only says whether the folder is skipped; "only" is its own setting below.
+              const on = !skip.includes(f.dir) && !parentOff;
               return (
                 <li key={f.dir} className={f.depth ? "pl-5" : ""}>
                   <label className="flex items-center gap-2 py-0.5 font-mono text-[12.5px] text-fg-2">
@@ -430,7 +453,9 @@ function FolderPicker({ summary }: { summary: RepoSummary }) {
                       onChange={(e) => setSkip((was) => (e.target.checked ? was.filter((d) => d !== f.dir) : [...was, f.dir]))}
                       className="accent-[var(--color-trail)]"
                     />
-                    <span className="min-w-0 flex-1 truncate">{f.dir}/</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {f.dir}/{parentOff && <span className="ml-1.5 font-sans text-[11px] text-fg-3">(left out with its folder)</span>}
+                    </span>
                     <span className="text-fg-3">{formatTokens(f.tokens)}</span>
                   </label>
                 </li>
@@ -439,11 +464,23 @@ function FolderPicker({ summary }: { summary: RepoSummary }) {
           </ul>
           <label className="block">
             <span className="font-mono text-[11px] text-fg-3">Only these folders or globs, comma-separated (empty: all of them)</span>
-            <input value={only} onChange={(e) => setOnly(e.target.value)} placeholder="e.g. src, packages/core" className="mt-1 w-full rounded-[10px] border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-3 focus:border-trail/60" />
+            <input
+              value={only}
+              onChange={(e) => setOnly(e.target.value)}
+              placeholder="e.g. src, packages/core"
+              aria-invalid={unmatched.length > 0}
+              aria-describedby={unmatched.length ? "scope-unmatched" : undefined}
+              className="mt-1 w-full rounded-[10px] border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-fg outline-none placeholder:text-fg-3 focus:border-trail/60"
+            />
           </label>
+          {unmatched.length > 0 && (
+            <p id="scope-unmatched" role="alert" className="text-[13px] text-danger">
+              Nothing in this commit matches {unmatched.map((u) => `"${u}"`).join(", ")}. Check the spelling, or pick from the folders above.
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-line bg-panel px-4 py-3">
             <p className="font-mono text-[12.5px] text-fg-2">
-              {scopeLabel(draft) ?? "Everything"} · ≈ {formatTokens(tokens)} tokens{cost !== null ? ` · first read ≈ ${formatUsd(cost)}` : ""}
+              {empty ? "No files would be read" : `${scopeLabel(draft) ?? "Everything"} · ≈ ${formatTokens(tokens)} tokens${cost !== null ? ` · first read ≈ ${formatUsd(cost)}` : ""}`}
               <span className="block text-[11px] text-fg-3">{current ? "Counted from the folders in this read; exact numbers after Apply." : "Exact numbers after Apply."}</span>
             </p>
             <span className="flex gap-2">
@@ -453,7 +490,8 @@ function FolderPicker({ summary }: { summary: RepoSummary }) {
                 </a>
               )}
               <button
-                disabled={!changed}
+                disabled={!changed || empty}
+                title={empty ? "No files match these folders" : undefined}
                 onClick={() => window.location.assign(`/${summary.owner}/${summary.repo}${scopeQuery(draft)}`)}
                 className="rounded-[10px] bg-trail px-3 py-1.5 text-[13px] font-semibold text-[#16171a] disabled:opacity-40"
               >

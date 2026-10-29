@@ -1,0 +1,8 @@
+{
+  "name": "codetrail",
+  "version": "0.4.0",
+  "description": "A repo's architecture, line-checked tours, docs and answers from DeepSeek V4.1 Flash 1017, as MCP tools, from a Codetrail you run",
+  "author": { "name": "Studio1", "url": "https://studio1hq.com" },
+  "license": "MIT",
+  "keywords": ["codebase", "architecture", "code-tour", "mcp", "onboarding"]
+}

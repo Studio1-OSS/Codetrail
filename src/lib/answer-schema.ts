@@ -89,6 +89,8 @@ export type StoredAnswer = {
   calls: import("./schemas").CallRecord[];
   at: number;
   thorough?: boolean;
+  /** A Research answer: the plan it made and what each round found, before the answer was written. */
+  research?: { plan: string; rounds: string[] };
 };
 
 export const refKey = (file: string, startLine: number) => `${file}:${startLine}`;

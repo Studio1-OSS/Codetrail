@@ -238,7 +238,15 @@ export type PullView = {
 export type PullIndexEntry = { id: string; number: number; title: string; headSha: string; steps: number; review: number; cost: number | null; at: number };
 
 /** A step after checking: the line range is the one the anchor really sits in. */
-export type Step = Omit<TourAnswer["steps"][number], "anchor"> & { anchor: string; corrected: boolean };
+export type Step = Omit<TourAnswer["steps"][number], "anchor"> & {
+  anchor: string;
+  corrected: boolean;
+  /** Brought over from an earlier commit whose quoted line is gone here: shown at its old place, with a warning. */
+  stale?: boolean;
+};
+/** A step that points at code. Hand-written and CodeTour tours can also have text-only steps (an intro, a summary),
+ * stored with an empty `file`: no code panel, no place on the map. */
+export const onCode = (s: { file: string }) => s.file !== "";
 
 export type Usage = { input: number; cached: number; output: number };
 
@@ -269,6 +277,8 @@ export type Tour = Omit<TourAnswer, "steps" | "followUps"> & {
   /** "codetour": written by the repo's maintainers as a VS Code CodeTour file, imported and checked. "custom": written
    * (or edited from another tour) by someone on this instance, each step checked against the code. */
   source?: "codetour" | "custom";
+  /** The maintainers' first tour (CodeTour's isPrimary, or main.tour). */
+  primary?: boolean;
   question: string;
   steps: Step[];
   /** Steps whose line range was moved to where the anchor really is, and steps dropped as unverifiable. */
@@ -280,6 +290,8 @@ export type Tour = Omit<TourAnswer, "steps" | "followUps"> & {
   modules?: string[];
   /** Questions the model suggested asking next. */
   followUps?: string[];
+  /** Brought over from the read of an earlier commit: how many steps moved with their code, and how many went stale. */
+  carriedFrom?: { sha: string; moved: number; stale: number };
 };
 
 export type Price = { input: number; cached: number; output: number };
@@ -325,4 +337,4 @@ export type RepoSummary = {
 };
 
 /** A tour stored for a commit, listed so everyone opening the repo can replay it for free. */
-export type TourIndexEntry = { id: string; title: string; question: string; steps: number; cost: number | null; at: number; source?: "codetour" | "custom" };
+export type TourIndexEntry = { id: string; title: string; question: string; steps: number; cost: number | null; at: number; source?: "codetour" | "custom"; primary?: boolean };

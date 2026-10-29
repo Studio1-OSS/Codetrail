@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpRight, BookOpen, ChevronDown, GitPullRequest, Loader2, Lock, Star } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Rich } from "@/components/rich";
 import type { DocPage } from "@/lib/docs-schema";
 import { formatUsd } from "@/lib/format";
@@ -9,7 +9,7 @@ import type { AskMode, Stored } from "@/lib/match";
 import { PALETTE } from "@/lib/palette";
 import { LOCAL_OWNER, parseRepoInput } from "@/lib/ref";
 import type { Atlas, CallRecord, PullIndexEntry, RepoSummary, TourIndexEntry } from "@/lib/schemas";
-import { seenLabel } from "@/lib/progress";
+import { dismissNote, noteDismissed, seenLabel } from "@/lib/progress";
 import type { ThreadIndexEntry } from "@/lib/thread";
 import { AskBox } from "./ask-box";
 import { sameText } from "./player";
@@ -48,12 +48,19 @@ type Props = {
   onOpenThread: (id: string) => void;
   /** Steps seen per tour, in this browser. */
   seen: Record<string, number[]>;
+  /** Tours of the repo's earlier read that could be brought to this commit. */
+  carry: { from: string; count: number } | null;
+  onCarry: () => void;
+  /** Forgets the steps seen, so every tour starts fresh. */
+  onResetProgress: () => void;
+  /** Opens a CodeTour file from a GitHub or gist link; resolves to an error message, or null when it opened. */
+  onTourUrl: (url: string) => Promise<string | null>;
   /** Starts writing a tour by hand. */
   onWrite: () => void;
 };
 
 export function Sidebar(props: Props) {
-  const { summary, atlas, tours, ledger, activeTourId, tracing, onOpenTour, onTrace, answers, activeAnswerId, onOpenAnswer, onAsk, docsPages, docsBusy, onDocs, pulls, activePull, threads, activeThreadId, onOpenThread, seen, onWrite } = props;
+  const { summary, atlas, tours, ledger, activeTourId, tracing, onOpenTour, onTrace, answers, activeAnswerId, onOpenAnswer, onAsk, docsPages, docsBusy, onDocs, pulls, activePull, threads, activeThreadId, onOpenThread, seen, carry, onCarry, onResetProgress, onTourUrl, onWrite } = props;
   const progress = (t: { id: string; steps: number }) => {
     const label = seenLabel(seen[t.id], t.steps);
     return label ? ` · ${label}` : "";
@@ -66,6 +73,12 @@ export function Sidebar(props: Props) {
   const asked = tours.filter((t) => !suggestedSet.has(norm(t.question)) && !t.source).sort((a, b) => b.at - a.at);
   const maintainers = tours.filter((t) => t.source === "codetour");
   const yours = tours.filter((t) => t.source === "custom").sort((a, b) => b.at - a.at);
+  const anySeen = Object.values(seen).some((s) => s.length > 0);
+  // Once per repo: the maintainers wrote tours, here's where to start.
+  const noteId = `${summary.owner}/${summary.repo}:maintainer-tours`;
+  const [note, setNote] = useState(false);
+  useEffect(() => setNote(maintainers.length > 0 && !noteDismissed(noteId)), [maintainers.length, noteId]);
+  const first = maintainers.find((t) => t.primary) ?? maintainers[0];
   const langs = Object.entries(summary.languages).sort((a, b) => b[1] - a[1]);
   const langTotal = langs.reduce((a, [, n]) => a + n, 0) || 1;
 
@@ -111,7 +124,7 @@ export function Sidebar(props: Props) {
       </div>
 
       <div>
-        <button onClick={() => setOverview((o) => !o)} className="flex w-full items-center justify-between font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">
+        <button onClick={() => setOverview((o) => !o)} aria-expanded={overview} className="flex w-full items-center justify-between font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">
           Overview <ChevronDown className={`size-3.5 transition ${overview ? "" : "-rotate-90"}`} />
         </button>
         {overview && (
@@ -148,11 +161,43 @@ export function Sidebar(props: Props) {
 
       <div>
         <div className="flex items-center justify-between">
-          <h3 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Tours</h3>
-          <button onClick={onWrite} disabled={tracing !== null} className="font-mono text-[10.5px] text-trail hover:underline disabled:opacity-40" title="Write your own tour: pick lines of code and say what they do. Free.">
-            + Write a tour
-          </button>
+          <h2 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Tours</h2>
+          <span className="flex items-center gap-3">
+            {anySeen && (
+              <button onClick={onResetProgress} className="font-mono text-[10.5px] text-fg-3 hover:text-fg hover:underline" title="Forget which steps you've seen, in this browser">
+                Reset progress
+              </button>
+            )}
+            <button onClick={onWrite} disabled={tracing !== null} className="font-mono text-[10.5px] text-trail hover:underline disabled:opacity-40" title="Write your own tour: pick lines of code and say what they do. Free.">
+              + Write a tour
+            </button>
+          </span>
         </div>
+        <TourLink onOpen={onTourUrl} disabled={tracing !== null} />
+        {carry && (
+          <button onClick={onCarry} className="mt-2 block w-full rounded-[10px] border border-dashed border-trail/50 px-3 py-2 text-left text-[12.5px] text-fg-2 hover:border-trail">
+            Bring {carry.count === 1 ? "the tour" : `${carry.count} tours`} from the read at <span className="font-mono">{carry.from.slice(0, 7)}</span>
+            <span className="block font-mono text-[10.5px] text-fg-3">each step checked again against this commit · free</span>
+          </button>
+        )}
+        {note && first && (
+          <div role="note" className="mt-2 rounded-[10px] border border-trail/40 bg-trail-soft px-3 py-2 text-[12.5px] text-fg-2">
+            This repo comes with {maintainers.length === 1 ? "a tour" : `${maintainers.length} tours`} written by its maintainers. Start with{" "}
+            <button onClick={() => onOpenTour(first.id)} className="text-trail hover:underline">
+              {first.title}
+            </button>
+            .
+            <button
+              onClick={() => {
+                dismissNote(noteId);
+                setNote(false);
+              }}
+              className="ml-2 font-mono text-[10.5px] text-fg-3 hover:text-fg"
+            >
+              Got it
+            </button>
+          </div>
+        )}
         <ul className="mt-2">
           {suggested.map((t) => (
             <TourItem
@@ -169,7 +214,7 @@ export function Sidebar(props: Props) {
         </ul>
         {yours.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Your tours</h3>
+            <h2 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Your tours</h2>
             <ul className="mt-2">
               {yours.map((t) => (
                 <TourItem key={t.id} title={t.title} question={t.question} active={t.id === activeTourId} tracing={false} disabled={false} meta={`${t.steps} steps · written here${progress(t)}`} onClick={() => onOpenTour(t.id)} />
@@ -179,7 +224,7 @@ export function Sidebar(props: Props) {
         )}
         {maintainers.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Written by the maintainers</h3>
+            <h2 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Written by the maintainers</h2>
             <ul className="mt-2">
               {maintainers.map((t) => (
                 <TourItem key={t.id} title={t.title} question={t.question} active={t.id === activeTourId} tracing={false} disabled={false} meta={`${t.steps} steps · CodeTour file · checked${progress(t)}`} onClick={() => onOpenTour(t.id)} />
@@ -189,7 +234,7 @@ export function Sidebar(props: Props) {
         )}
         {answers.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Answers</h3>
+            <h2 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Answers</h2>
             <ul className="mt-2">
               {[...answers].reverse().map((a) => (
                 <TourItem key={a.id} title={a.title} question={a.question} active={a.id === activeAnswerId} tracing={false} disabled={false} meta="answer · free to replay" onClick={() => onOpenAnswer(a.id)} />
@@ -199,7 +244,7 @@ export function Sidebar(props: Props) {
         )}
         {threads.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Conversations</h3>
+            <h2 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Conversations</h2>
             <ul className="mt-2">
               {[...threads]
                 .sort((a, b) => b.at - a.at)
@@ -211,7 +256,7 @@ export function Sidebar(props: Props) {
         )}
         {asked.length > 0 && (
           <>
-            <h3 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Asked here</h3>
+            <h2 className="mt-5 font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Asked here</h2>
             <ul className="mt-2">
               {asked.map((t) => (
                 <TourItem
@@ -294,7 +339,7 @@ function PullRequests({ summary, pulls, active }: { summary: RepoSummary; pulls:
 
   return (
     <div>
-      <h3 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Pull requests</h3>
+      <h2 className="font-mono text-[10.5px] tracking-[0.18em] text-fg-3 uppercase">Pull requests</h2>
       {byNumber.size > 0 && (
         <ul className="mt-2">
           {[...byNumber.values()].map(([p, ...older]) => (
@@ -338,5 +383,65 @@ function PullRequests({ summary, pulls, active }: { summary: RepoSummary; pulls:
         </p>
       )}
     </div>
+  );
+}
+
+/** "Open a tour from a link": a CodeTour file on GitHub or in a gist, checked against this commit and saved here. */
+function TourLink({ onOpen, disabled }: { onOpen: (url: string) => Promise<string | null>; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} disabled={disabled} className="mt-1 font-mono text-[10.5px] text-fg-3 hover:text-fg hover:underline disabled:opacity-40">
+        Open a tour from a link
+      </button>
+    );
+  }
+  return (
+    <form
+      className="mt-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError(null);
+        const problem = await onOpen(url.trim());
+        setBusy(false);
+        if (problem) setError(problem);
+        else {
+          setUrl("");
+          setOpen(false);
+        }
+      }}
+    >
+      <label htmlFor="tour-link" className="font-mono text-[10.5px] text-fg-3">
+        Link to a .tour file on GitHub, or a raw gist
+      </label>
+      <div className="mt-1 flex gap-1.5">
+        <input
+          id="tour-link"
+          autoFocus
+          type="url"
+          required
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+          placeholder="https://github.com/owner/repo/blob/main/.tours/intro.tour"
+          aria-invalid={!!error}
+          aria-describedby={error ? "tour-link-error" : undefined}
+          className="min-w-0 flex-1 rounded-[9px] border border-line bg-ink px-2 py-1.5 font-mono text-[11.5px] text-fg outline-none placeholder:text-fg-3 focus:border-trail/60"
+        />
+        <button type="submit" disabled={busy || !url.trim()} className="rounded-[9px] bg-trail px-2.5 font-mono text-[11px] font-semibold text-[#16171a] disabled:opacity-50">
+          {busy ? "Opening…" : "Open"}
+        </button>
+      </div>
+      {error && (
+        <p id="tour-link-error" role="alert" className="mt-1 text-[12px] text-danger">
+          {error}
+        </p>
+      )}
+      <p className="mt-1 text-[11px] text-fg-3">Its steps are checked against this commit. Free.</p>
+    </form>
   );
 }

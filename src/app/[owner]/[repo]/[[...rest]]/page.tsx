@@ -18,7 +18,7 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
   if (pull) {
     const stored = await storedPull(owner, repo, pull).catch(() => null);
     const title = stored ? `PR #${pull}: ${stored.title} · ${owner}/${repo}` : `PR #${pull} in ${owner}/${repo}, explained`;
-    const description = `A guided tour through pull request #${pull} in ${owner}/${repo}: what it changes, in the order it runs, with notes for the reviewer. Every line checked.`;
+    const description = `A guided tour through pull request #${pull} in ${owner}/${repo}: what it changes, in the order it runs, with notes for the reviewer tied to the lines they're about.`;
     const image = `/${owner}/${repo}/trail-card${stored ? `?tour=${stored.id}` : ""}`;
     const url = `/${owner}/${repo}/pull/${pull}`;
     return {
@@ -30,11 +30,12 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
     };
   }
   const overview = await storedOverview(owner, repo).catch(() => null);
-  const image = `/${owner}/${repo}/trail-card${tour && /^[0-9a-f]{12}$/.test(tour) ? `?tour=${tour}` : ""}`;
-  const title = `How ${owner}/${repo} works`;
+  // A tour link previews as its share card; the repo itself as its architecture diagram.
+  const image = tour && /^[0-9a-f]{12}$/.test(tour) ? `/${owner}/${repo}/trail-card?tour=${tour}` : overview ? `/${owner}/${repo}/diagram.png` : `/${owner}/${repo}/trail-card`;
+  const title = `${owner}/${repo}: architecture diagram, wiki and code tours`;
   const description = overview
-    ? `${overview.summary.slice(0, 150).replace(/\s+\S*$/, "")}… Guided tours, docs and an architecture map, every line checked.`
-    : `A guided, line-checked tour of how ${owner}/${repo} works: architecture map, docs and Q&A, read whole by DeepSeek V4.1 Flash 1017.`;
+    ? `${overview.summary.slice(0, 150).replace(/\s+\S*$/, "")}… Architecture diagram, wiki docs, code tours and Q&A.`
+    : `How ${owner}/${repo} works: architecture diagram, wiki docs, code tours and Q&A, read whole by DeepSeek V4.1 Flash 1017.`;
   return {
     title,
     description,

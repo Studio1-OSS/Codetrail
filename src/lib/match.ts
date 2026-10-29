@@ -1,7 +1,7 @@
 // Before a question costs anything: which kind of answer it wants, and whether something already stored answers
 // it. Plain word matching on what the browser already has (no model, no embeddings, no request).
 
-export type AskMode = "answer" | "tour" | "thorough";
+export type AskMode = "answer" | "tour" | "thorough" | "research";
 
 /** "Walk me through…" and "what happens when…" want a tour; everything else gets a structured answer. */
 export function pickMode(question: string): Exclude<AskMode, "thorough"> {

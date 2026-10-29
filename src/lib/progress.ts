@@ -25,6 +25,33 @@ export function markSeen(repo: string, seen: Seen, tourId: string, step: number)
   return next;
 }
 
+/** Forgets every step seen in this repo's tours. */
+export function resetSeen(repo: string): Seen {
+  try {
+    localStorage.removeItem(keyOf(repo));
+  } catch {
+    // No storage: nothing was kept.
+  }
+  return {};
+}
+
+/** A note shown once per repo, then remembered as dismissed. */
+export function noteDismissed(id: string): boolean {
+  try {
+    return localStorage.getItem(`codetrail:note:${id}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function dismissNote(id: string) {
+  try {
+    localStorage.setItem(`codetrail:note:${id}`, "1");
+  } catch {
+    // No storage: it shows again next time.
+  }
+}
+
 /** "✓ seen", "3/9 seen", or nothing yet. */
 export function seenLabel(seen: number[] | undefined, steps: number): string | null {
   const n = new Set(seen ?? []).size;

@@ -2,7 +2,7 @@
 
 // Sign-in state and today's free quota (hosted app only; nothing shows when AUTH_MODE=none).
 import { LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@/components/trail/dialog";
 import { authClient } from "@/lib/auth-client";
 
@@ -21,6 +21,24 @@ const signInWithGitHub = () => authClient.signIn.social({ provider: "github", ca
 export function UserMenu() {
   const [me, setMe] = useState<Me | null>(null);
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  // Escape or a click outside closes it; Escape puts focus back on the button.
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    window.addEventListener("mousedown", away);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("mousedown", away);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
   useEffect(() => {
     fetch("/api/me")
       .then((r) => (r.ok ? r.json() : null))
@@ -37,8 +55,13 @@ export function UserMenu() {
   }
   const left = { reads: Math.max(0, me.limits.reads - (me.usage?.reads ?? 0)), asks: Math.max(0, me.limits.asks - (me.usage?.asks ?? 0)) };
   return (
-    <div className="relative">
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`Signed in as ${me.viewer.name}`} className="flex items-center gap-2 rounded-[10px] border border-line bg-panel py-1 pr-2.5 pl-1 text-[12.5px] text-fg-2 hover:border-outline">
+    <div ref={box} className="relative">
+      <button
+        ref={button}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="user-panel"
+        aria-label={`${me.viewer.name}: ${left.reads}/${me.limits.reads} · ${left.asks}/${me.limits.asks} reads and questions left today`} className="flex items-center gap-2 rounded-[10px] border border-line bg-panel py-1 pr-2.5 pl-1 text-[12.5px] text-fg-2 hover:border-outline">
         {me.viewer.image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={me.viewer.image} alt="" className="size-6 rounded-full" />
@@ -50,7 +73,7 @@ export function UserMenu() {
         </span>
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-64 rounded-card border border-line bg-panel p-3 text-[13px] shadow-xl">
+        <div id="user-panel" className="absolute right-0 z-50 mt-2 w-64 rounded-card border border-line bg-panel p-3 text-[13px] shadow-xl">
           <p className="font-medium text-fg">{me.viewer.name}</p>
           <p className="mt-2 text-fg-2">Free today, resets at midnight UTC:</p>
           <p className="mt-1 font-mono text-[12px] text-fg-2">

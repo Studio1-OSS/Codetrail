@@ -32,8 +32,24 @@ export function BrowseList({ reads }: { reads: ReadEntry[] }) {
           className="w-full max-w-sm rounded-[10px] border border-line bg-panel px-3 py-2 font-mono text-[13px] text-fg outline-none placeholder:text-fg-3 focus:border-trail/60"
         />
         <div role="radiogroup" aria-label="Sort" className="flex gap-0.5 rounded-[10px] border border-line p-[3px]">
-          {(Object.keys(SORTS) as Sort[]).map((s) => (
-            <button key={s} role="radio" aria-checked={sort === s} onClick={() => setSort(s)} className={`rounded-[7px] px-2.5 py-1 font-mono text-[11.5px] ${sort === s ? "bg-fg text-ink" : "text-fg-3 hover:text-fg"}`}>
+          {(Object.keys(SORTS) as Sort[]).map((s, i, all) => (
+            <button
+              key={s}
+              id={`sort-${s}`}
+              role="radio"
+              aria-checked={sort === s}
+              tabIndex={sort === s ? 0 : -1}
+              onClick={() => setSort(s)}
+              onKeyDown={(e) => {
+                const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                e.preventDefault();
+                const next = all[(i + step + all.length) % all.length];
+                setSort(next);
+                document.getElementById(`sort-${next}`)?.focus();
+              }}
+              className={`rounded-[7px] border-b-2 px-2.5 py-1 font-mono text-[11.5px] ${sort === s ? "border-trail bg-fg text-ink" : "border-transparent text-fg-3 hover:text-fg"}`}
+            >
               {SORTS[s]}
             </button>
           ))}
@@ -49,6 +65,10 @@ export function BrowseList({ reads }: { reads: ReadEntry[] }) {
             home page
           </Link>{" "}
           to start.
+        </p>
+      ) : shown.length === 0 ? (
+        <p className="mt-8 text-sm text-fg-3" role="status">
+          No repo matches &ldquo;{q}&rdquo;.
         </p>
       ) : (
         <ul className="mt-6 divide-y divide-line border-y border-line">

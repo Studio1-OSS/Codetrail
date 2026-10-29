@@ -99,6 +99,14 @@ describe("tourToCodeTour", () => {
     });
   });
 
+  it("writes text steps as content steps, and marks the primary tour and the one after it", () => {
+    const withIntro = { ...tour, primary: true, steps: [{ node: "", title: "Intro", file: "", startLine: 0, endLine: 0, anchor: "", narration: "The idea." }, ...tour.steps] } as Parameters<typeof tourToCodeTour>[0];
+    const t = tourToCodeTour(withIntro, { owner: "o", repo: "r", sha: "abcdef1234" }, "Storage");
+    expect(t.steps[0]).toEqual({ title: "Intro", description: "The idea." });
+    expect(t).toMatchObject({ isPrimary: true, nextTour: "Storage" });
+    expect(tourToCodeTour(tour, { owner: "o", repo: "r", sha: "abcdef1234" })).not.toHaveProperty("isPrimary");
+  });
+
   it("pins a PR tour to the PR's head", () => {
     const pr = { ...tour, pull: { headSha: "feedface99" } } as Parameters<typeof tourToCodeTour>[0];
     expect(tourToCodeTour(pr, { owner: "o", repo: "r", sha: "abcdef1234" }).ref).toBe("feedface99");

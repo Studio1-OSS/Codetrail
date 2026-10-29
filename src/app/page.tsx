@@ -9,7 +9,7 @@ import { timeAgo } from "@/lib/format";
 import { siteTotals } from "@/server/stats";
 import { LOCAL_OWNER } from "@/lib/ref";
 import { listLocal } from "@/server/repo/local";
-import { getFeatured, getRecent } from "@/server/trail/service";
+import { getFeatured, getRecent, newestPerRepo } from "@/server/trail/service";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can I ask follow-up questions?",
-    a: "Yes. Under every answer and repo tour (not pull-request tours) there are suggested follow-ups and a box for your own. Each follow-up gets a short recap of the conversation, so the answer builds on what was said, and every code reference is checked like the rest. Conversations get their own link. For harder questions, Thorough mode traces the answer across every file involved.",
+    a: "Yes. Under every answer and repo tour (not pull-request tours) there are suggested follow-ups and a box for your own. Each follow-up gets a short recap of the conversation, so the answer builds on what was said, and every code reference is checked like the rest. Conversations get their own link. For harder questions, Thorough mode traces the answer across every file involved, and Research plans what to find out and looks in up to three rounds before it answers.",
   },
   {
     q: "Can it explain a pull request?",
@@ -70,7 +70,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can my coding agent use it?",
-    a: "Yes. The MCP server gives Claude Code, Cursor and other agents the map, tours, answers with follow-ups and pull-request tours of any GitHub repo (and, self-hosted, your local folders), at /api/mcp or run locally. Tours also export to VS Code CodeTour, and docs export as Markdown.",
+    a: "Yes. The MCP server gives Claude Code, Cursor and other agents the map, tours, answers with follow-ups and pull-request tours of any GitHub repo (and, self-hosted, your local folders), at /api/mcp or run locally, plus a search of a read's files and its docs. It installs as a Claude Code plugin, and in one click in VS Code and Cursor. Tours also export to VS Code CodeTour, docs export as Markdown, and any module, tour or answer copies as a prompt for an AI chat.",
   },
   {
     q: "How is it different from DeepWiki or GitDiagram?",
@@ -93,26 +93,26 @@ const COMPARE: { cap: string; cells: [Cell, Cell, Cell, Cell, Cell] }[] = [
   { cap: "What the model sees", cells: [y("Every file, one prompt"), t("Tree, README, source excerpts"), t("An index, searched per page and question"), t("No model"), t("AI agents search the code")] },
   { cap: "Architecture diagram", cells: [y("Layers, routed links; open a module into its files"), y("Layers, colours, links"), y("Mermaid in wiki pages"), dash, y("C4 and UML, editable")] },
   { cap: "Written docs for every module", cells: [y("References checked, a diagram per page"), t("A short overview"), y("A wiki"), dash, t("Diagram-led docs")] },
-  { cap: "Ask questions about the code", cells: [y("Follow-ups, Thorough mode"), dash, y("Deep Research"), dash, y()] },
+  { cap: "Ask questions about the code", cells: [y("Follow-ups, Thorough and Research"), dash, y("Deep Research"), dash, y()] },
   { cap: "Step-by-step walkthroughs with file + line", cells: [y("Generated or yours, every line checked"), dash, t("Codemaps"), y("Hand-written"), t("In search results")] },
   { cap: "Tour markers in the code, progress", cells: [y(), dash, dash, y(), dash] },
   { cap: "Pull requests", cells: [y("A tour of the change, review notes"), dash, dash, t("Tours pinned to a commit"), t("PR diagrams (paid plan)")] },
-  { cap: "Checked against the code", cells: [y("Every quoted line"), t("Every linked path"), dash, t("Drift warnings in CI"), dash] },
+  { cap: "Checked against the code", cells: [y("Every quoted line, again on each newer commit"), t("Every linked path"), dash, t("Drift warnings in CI"), dash] },
   { cap: "Export the diagram", cells: [y("Mermaid, SVG, PNG, draw.io"), y("Mermaid, PNG"), dash, t(".tour files"), y("Mermaid, draw.io, PNG, SVG")] },
-  { cap: "A live diagram image for a README", cells: [y("With a badge"), y("With a badge"), t("A badge"), dash, t("Embeds (Teams plan)")] },
+  { cap: "A live diagram image for a README", cells: [y("SVG or PNG, with a badge"), y("With a badge"), t("A badge"), dash, t("Embeds (Teams plan)")] },
   { cap: "Markdown page for AI tools", cells: [y("/owner/repo.md, llms.txt"), y("/owner/repo.md, llms.txt"), dash, dash, dash] },
   { cap: "Read only some folders", cells: [y("Folders or globs"), dash, t("Page list in .devin/wiki.json"), dash, dash] },
   { cap: "What it costs you", cells: [y("Your key; price before and after every call"), t("Free quota, cost after a run"), t("Free for public repos"), t("Free"), t("Free tier, Pro $19/month")] },
   { cap: "Works from a URL in the browser", cells: [y(), y(), y(), t("VS Code (desktop and web)"), t("VS Code")] },
-  { cap: "MCP server for coding agents", cells: [y(), y(), y(), dash, dash] },
+  { cap: "MCP server for coding agents", cells: [y("Also a Claude Code plugin"), y(), y(), dash, dash] },
   { cap: "Open source", cells: [y("MIT"), y("MIT"), t("No"), y("MIT"), t("No")] },
-  { cap: "Private code", cells: [y("Self-hosted, local folders"), y("With a GitHub token"), t("With a Devin account"), y("Local files"), t("Local folders; code goes to cloud models")] },
+  { cap: "Private code", cells: [y("GitHub token or local folders; code goes to DeepSeek on your key"), y("With a GitHub token"), t("With a Devin account"), y("Local files"), t("Local folders; code goes to cloud models")] },
   { cap: "Function-level call graph", cells: [y("JS/TS, Python, Go"), dash, dash, dash, y("From the language server")] },
   { cap: "Explainer video of a repo", cells: [dash, y(), dash, dash, dash] },
 ];
 
 export default async function Home() {
-  const [recent, totals, featured, folders] = await Promise.all([getRecent().catch(() => []), siteTotals().catch(() => null), getFeatured(), listLocal()]);
+  const [recent, totals, featured, folders] = await Promise.all([getRecent().then(newestPerRepo).catch(() => []), siteTotals().catch(() => null), getFeatured(), listLocal()]);
   const trail = featured ?? FALLBACK_FEATURED;
 
   // Structured data for search engines: the app itself, and the FAQ.
@@ -131,11 +131,15 @@ export default async function Home() {
   ];
 
   return (
-    <main className="min-h-dvh bg-ink text-fg">
+    <div className="relative min-h-dvh bg-ink text-fg">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-      <Headlamp terrain={trail.terrain} waypoints={trail.waypoints}>
+      {/* The header sits over the hero, outside <main>, so it's the page's banner. */}
+      <div className="absolute inset-x-0 top-0 z-20">
         <SiteHeader overlay />
-        <div className="relative mx-auto max-w-[1240px] px-4 pt-16 pb-24 sm:px-6 sm:pt-24 sm:pb-32">
+      </div>
+      <main id="main">
+      <Headlamp terrain={trail.terrain} waypoints={trail.waypoints}>
+        <div className="relative mx-auto max-w-[1240px] px-4 pt-36 pb-24 sm:px-6 sm:pt-44 sm:pb-32">
           <p className="font-mono text-[11px] tracking-[0.22em] text-trail uppercase">{MODEL_LABEL} · 1M-token context</p>
           <h1 className="mt-5 max-w-[900px] font-display text-[44px] leading-[0.98] font-light tracking-[-0.05em] [font-stretch:78%] sm:text-[84px]">
             Every repo is a <span className="font-extrabold text-trail [font-stretch:112%]">trail</span>.
@@ -143,8 +147,8 @@ export default async function Home() {
             Walk it<span className="caret text-trail">_</span>
           </h1>
           <p className="mt-6 max-w-[520px] bg-ink/55 text-[17px] leading-relaxed text-fg-2 backdrop-blur-sm">
-            Diagram, docs, code tour and Q&amp;A, in one link. Paste any GitHub repo: {MODEL_LABEL} reads every file at once, draws the architecture, writes the docs and walks
-            you through how the code actually runs, line by checked line.
+            Diagram, wiki, code tours and Q&amp;A, in one link. Paste any GitHub repo: {MODEL_LABEL} reads every file at once, draws the architecture, writes the docs and walks
+            you through how the code actually runs, step by step.
           </p>
           <div className="mt-9">
             <RepoInput autoFocus />
@@ -302,10 +306,12 @@ export default async function Home() {
         </section>
       )}
 
+      </main>
+
       <footer className="mx-auto flex max-w-[1240px] flex-wrap justify-between gap-3 border-t border-line px-4 py-7 font-mono text-[11px] tracking-[0.12em] text-fg-3 uppercase sm:px-6">
         <span>Codetrail · open source · bring your own Nebius key</span>
         <span>Built on {MODEL_LABEL} · runs on Nebius Token Factory</span>
       </footer>
-    </main>
+    </div>
   );
 }

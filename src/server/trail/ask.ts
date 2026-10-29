@@ -4,7 +4,7 @@
 import type { ElementNode } from "@openuidev/lang-core";
 import { plainLibrary as serverLibrary, parseAnswer } from "@/lib/answer-lib";
 import { ANSWER_EXAMPLE, ANSWER_RULES, cleanProgram, refKey, THOROUGH_RULES, type StoredAnswer } from "@/lib/answer-schema";
-import type { Atlas } from "@/lib/schemas";
+import type { Atlas, CallRecord } from "@/lib/schemas";
 import { chatText, type StreamHooks } from "@/server/ai/nebius";
 import { getJSON, putJSON } from "@/server/store";
 import { groundSteps, resolvePath } from "./ground";
@@ -84,10 +84,29 @@ async function writeAnswer(p: Prepared, atlas: Atlas, q: string, id: string, who
   );
   const text = cleanProgram(raw);
   const answer: StoredAnswer = { id, question: q, text, checks: checkAnswer(text, p, atlas), calls: [record], at: Date.now(), ...(opts.thorough ? { thorough: true } : {}) };
-  await putJSON(`${answerBase(p)}/answers/${id}.json`, answer);
-  if (opts.follow) return { answer, fromCache: false };
-  const index = await getAnswerIndex(p);
-  const title = (answerTitle(text) ?? q).slice(0, 100);
-  await putJSON(`${answerBase(p)}/answers.json`, [...index.filter((a) => a.id !== id), { id, question: q, title, at: answer.at }]);
+  await saveAnswer(p, answer, !opts.follow);
   return { answer, fromCache: false };
+}
+
+/** Stores an answer; `listed` adds it to the repo's answers (follow-ups belong to their conversation only). */
+async function saveAnswer(p: Prepared, answer: StoredAnswer, listed: boolean) {
+  await putJSON(`${answerBase(p)}/answers/${answer.id}.json`, answer);
+  if (!listed) return;
+  const index = await getAnswerIndex(p);
+  const title = (answerTitle(answer.text) ?? answer.question).slice(0, 100);
+  await putJSON(`${answerBase(p)}/answers.json`, [...index.filter((a) => a.id !== answer.id), { id: answer.id, question: answer.question, title, at: answer.at }]);
+}
+
+/**
+ * The last step of a Research run: the usual structured answer, written with the plan and the findings before the
+ * question, its references checked like any answer's, and stored with how it was researched.
+ */
+export async function concludeResearch(p: Prepared, atlas: Atlas, q: string, id: string, research: { context: string; plan: string; rounds: string[]; calls: CallRecord[] }, stream?: StreamHooks): Promise<StoredAnswer> {
+  const { result: raw, record } = await trackedCall(p, "ask", q, (cfg) =>
+    chatText(cfg, { prefix: p.prefix, task: [research.context, PROMPT, `Question: ${q}`].join("\n\n"), cacheKey: `codetrail:${p.info.owner}/${p.info.repo}@${p.info.sha}`, effort: "medium", maxTokens: 8_192, stream }),
+  );
+  const text = cleanProgram(raw);
+  const answer: StoredAnswer = { id, question: q, text, checks: checkAnswer(text, p, atlas), calls: [...research.calls, record], at: Date.now(), research: { plan: research.plan, rounds: research.rounds } };
+  await saveAnswer(p, answer, true);
+  return answer;
 }

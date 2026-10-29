@@ -156,6 +156,9 @@ async function complete(config: NebiusConfig, body: OpenAI.Chat.Completions.Chat
     }
     if (choice.finish_reason) finish = choice.finish_reason;
   }
+  // An aborted stream can end quietly, part-way through: that's a Stop, never a finished reply to store.
+  if (signal?.aborted) throw new CancelledError();
+  if (!finish) throw new AIError("The reply stopped before it finished.", "truncated");
   return { content, reasoning, finish };
 }
 

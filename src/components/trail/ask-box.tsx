@@ -13,6 +13,7 @@ const MODES: { id: AskMode; label: string; hint: string }[] = [
   { id: "answer", label: "Answer", hint: "A short structured answer: tables, file lists, call sequences, checked code references" },
   { id: "tour", label: "Tour", hint: "A step-by-step walk through the code, in the order it runs" },
   { id: "thorough", label: "Thorough", hint: "Slower and more thorough: traces the answer across every file involved" },
+  { id: "research", label: "Research", hint: "For questions one pass can't settle: plans what to find out, looks in up to three rounds, then answers. A few calls on the cached repo" },
 ];
 
 const KIND_LABEL: Record<Stored["kind"], string> = { tour: "tour", answer: "answer", docs: "docs page", thread: "conversation" };
@@ -22,6 +23,13 @@ export function costOf(summary: RepoSummary, mode: AskMode, followUp: boolean) {
   const p = summary.price;
   if (!p) return null;
   const fresh = followUp ? 3_000 : 500;
+  // Research: a plan, up to three rounds and the answer, five calls on the repo, each sending the findings so far.
+  // The first calls on a repo can miss the cache, so the high end counts four at the full price.
+  if (mode === "research") {
+    const sent = 19_000;
+    const written = 15_500;
+    return { cached: 5 * summary.tokens * p.cached + sent * p.input + written * p.output, cold: summary.tokens * (4 * p.input + p.cached) + sent * p.input + written * p.output };
+  }
   const out = mode === "thorough" ? 14_000 : 5_000;
   return { cached: summary.tokens * p.cached + fresh * p.input + out * p.output, cold: (summary.tokens + fresh) * p.input + out * p.output };
 }
@@ -38,13 +46,17 @@ type Props = {
   onOpenStored?: (item: Stored) => void;
   followUp?: boolean;
   footer?: React.ReactNode;
+  /** Focus the box when it appears (a follow-up box the user just opened). */
+  autoFocus?: boolean;
 };
 
-export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpenStored, followUp = false, footer }: Props) {
+export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpenStored, followUp = false, footer, autoFocus }: Props) {
   const [question, setQuestion] = useState("");
   const [picked, setPicked] = useState<AskMode | null>(null);
   const id = useId();
   const q = question.trim();
+  // Research answers new questions; a follow-up keeps to Answer, Tour or Thorough.
+  const modes = followUp ? MODES.filter((m) => m.id !== "research") : MODES;
   const mode = picked ?? pickMode(q);
   const matches = stored && q.length >= 8 ? matchStored(q, stored) : [];
   const cost = costOf(summary, mode, followUp);
@@ -65,6 +77,7 @@ export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpe
       </label>
       <textarea
         id={`${id}-q`}
+        autoFocus={autoFocus}
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => {
@@ -92,15 +105,25 @@ export function AskBox({ summary, label, placeholder, busy, onAsk, stored, onOpe
       )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div role="radiogroup" aria-label="Kind of answer" className="flex gap-0.5 rounded-[9px] border border-line p-[2px]">
-          {MODES.map((m) => (
+          {modes.map((m, i) => (
             <button
               key={m.id}
+              id={`${id}-mode-${m.id}`}
               type="button"
               role="radio"
               aria-checked={mode === m.id}
+              tabIndex={mode === m.id ? 0 : -1}
               title={m.hint}
               onClick={() => setPicked(m.id)}
-              className={`rounded-[7px] px-2 py-0.5 font-mono text-[10.5px] tracking-[0.04em] ${mode === m.id ? "bg-fg text-ink" : "text-fg-3 hover:text-fg"}`}
+              onKeyDown={(e) => {
+                const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+                if (!step) return;
+                e.preventDefault();
+                const next = modes[(i + step + modes.length) % modes.length].id;
+                setPicked(next);
+                document.getElementById(`${id}-mode-${next}`)?.focus();
+              }}
+              className={`rounded-[7px] border-b-2 px-1.5 py-0.5 font-mono text-[10.5px] ${mode === m.id ? "border-trail bg-fg text-ink" : "border-transparent text-fg-3 hover:text-fg"}`}
             >
               {m.label}
             </button>

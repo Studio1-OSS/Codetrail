@@ -17,8 +17,11 @@
   --color-line: #1d2026;
   --color-fg: #eeece6;
   --color-fg-2: #a9abb2;
-  --color-fg-3: #7a7d86;
+  --color-fg-3: #868993;
   --color-trail: #ffb020;
+  /* Amber as text (links, labels) and the focus ring: the same amber in the dark, a deeper one on paper. */
+  --color-trail-text: #ffb020;
+  --color-focus: #ffb020;
   --color-trail-strong: #ffc451;
   --color-trail-soft: rgb(255 176 32 / 0.12);
   --color-trail-ink: #2e2004;
@@ -48,12 +51,18 @@
   --color-line: #e2dccd;
   --color-fg: #17181b;
   --color-fg-2: #4a4d55;
-  --color-fg-3: #686b73;
+  --color-fg-3: #5f626a;
   --color-trail: #e39400;
   --color-trail-strong: #f2a20c;
   --color-trail-soft: rgb(227 148 0 / 0.16);
+  --color-trail-text: #935000;
+  --color-focus: #935000;
   --color-contour: rgb(160 110 20 / 0.28);
-  --color-verified: #2a78d6;
+  --color-verified: #1f62b5;
+  /* Status colours deep enough to read on paper (4.5:1 or more on every surface). */
+  --color-ok: #17703f;
+  --color-warn: #8a5a00;
+  --color-danger: #b42318;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -67,12 +76,18 @@
     --color-line: #e2dccd;
     --color-fg: #17181b;
     --color-fg-2: #4a4d55;
-    --color-fg-3: #686b73;
+    --color-fg-3: #5f626a;
     --color-trail: #e39400;
     --color-trail-strong: #f2a20c;
     --color-trail-soft: rgb(227 148 0 / 0.16);
+    --color-trail-text: #935000;
+    --color-focus: #935000;
     --color-contour: rgb(160 110 20 / 0.28);
-    --color-verified: #2a78d6;
+    --color-verified: #1f62b5;
+    /* Status colours deep enough to read on paper (4.5:1 or more on every surface). */
+    --color-ok: #17703f;
+    --color-warn: #8a5a00;
+    --color-danger: #b42318;
   }
 }
 :root {
@@ -98,19 +113,57 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Keyboard focus is always visible: an amber ring that clears the element. */
+/* Keyboard focus is always visible: an amber ring that clears the element (3:1 or more on both themes). */
 :focus-visible {
-  outline: 2px solid var(--color-trail);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 svg :focus-visible,
 [role="dialog"]:focus-visible {
   outline: none;
 }
-svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
-  stroke: var(--color-trail);
-  stroke-width: 5px;
+/* Diagram boxes and graph nodes: a thick ring on the shape itself. */
+svg g[role="button"]:focus-visible > circle:nth-of-type(1),
+svg g[role="button"]:focus-visible > rect:first-of-type {
+  stroke: var(--color-focus);
+  stroke-width: 4px;
+}
+
+/* Amber text reads in the deeper amber on paper; amber fills stay bright. The code panel stays dark, so its amber
+   stays bright too (the :not() below). */
+:root[data-theme="light"] .text-trail:not(.code-surface *),
+:root[data-theme="light"] .hover\:text-trail:hover,
+:root[data-theme="light"] .group:hover .group-hover\:text-trail {
+  color: var(--color-trail-text);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .text-trail:not(.code-surface *),
+  :root:not([data-theme="dark"]) .hover\:text-trail:hover,
+  :root:not([data-theme="dark"]) .group:hover .group-hover\:text-trail {
+    color: var(--color-trail-text);
+  }
+}
+
+/* Windows high contrast and other forced colours: keep focus, selection and the diagram legible. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+  svg g[role="button"] rect,
+  svg g[role="button"] circle {
+    stroke: CanvasText;
+    forced-color-adjust: none;
+  }
+  svg g[role="button"]:focus-visible > rect:first-of-type,
+  svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
+    stroke: Highlight;
+  }
+  [aria-selected="true"],
+  [aria-checked="true"],
+  [aria-current="step"],
+  [aria-current="page"] {
+    outline: 2px solid Highlight;
+  }
 }
 
 ::selection {
@@ -170,7 +223,7 @@ svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
   width: 3.2em;
   margin-right: 1.2em;
   text-align: right;
-  color: #55546a;
+  color: #7d7c94;
 }
 .code-view .line.hl {
   background: var(--color-trail-soft);
@@ -179,8 +232,9 @@ svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
 .code-view .line.hl::before {
   color: var(--color-trail);
 }
+/* Lines outside the step recede but stay readable (4.5:1 or more for every token colour). */
 .code-view .line.dim {
-  opacity: 0.5;
+  opacity: 0.86;
 }
 /* Pull requests: added lines get a green bar and a "+" next to the line number; removed lines a red rule. */
 .code-view .line.add {
@@ -296,8 +350,9 @@ svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
     opacity: 0;
   }
 }
+/* Blinks a few times, then holds still (WCAG 2.2.2). */
 .caret {
-  animation: caret 1s steps(1) infinite;
+  animation: caret 1s steps(1) 4;
 }
 
 @keyframes trail-dash {
@@ -365,4 +420,140 @@ svg g[role="button"]:focus-visible > circle:nth-of-type(1) {
 }
 .indeterminate {
   animation: indeterminate 1.6s ease-in-out infinite;
+}
+
+/* The user guide (/guide): Markdown rendered as a readable page. */
+.guide {
+  max-width: 78ch;
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--color-fg-2);
+}
+.guide > * + * {
+  margin-top: 0.9em;
+}
+.guide h2 {
+  margin-top: 2.6em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--color-line);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  font-stretch: 85%;
+  color: var(--color-fg);
+  scroll-margin-top: 16px;
+}
+.guide h3 {
+  margin-top: 1.8em;
+  font-weight: 600;
+  color: var(--color-fg);
+  scroll-margin-top: 16px;
+}
+.guide h2 a,
+.guide h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.guide a {
+  color: var(--color-trail-text);
+  text-decoration: underline;
+  text-decoration-color: rgb(255 176 32 / 0.4);
+  text-underline-offset: 3px;
+}
+.guide strong {
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.guide ul,
+.guide ol {
+  padding-left: 1.3em;
+}
+.guide ul {
+  list-style: disc;
+}
+.guide ol {
+  list-style: decimal;
+}
+.guide li + li {
+  margin-top: 0.3em;
+}
+.guide li > ul {
+  margin-top: 0.3em;
+}
+.guide code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.12em 0.38em;
+  border-radius: 5px;
+  background: var(--color-raised);
+  color: var(--color-fg);
+}
+.guide pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--color-code);
+  border: 1px solid var(--color-line);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.guide pre code {
+  padding: 0;
+  background: none;
+  color: #cfd0d6;
+}
+.guide-scroll {
+  overflow-x: auto;
+}
+.guide table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.guide th,
+.guide td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+.guide th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+/* The current step's bar fills while autoplay waits; with reduced motion it simply shows full. */
+.step-fill-bar {
+  animation-name: step-fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-fill-bar {
+    width: 100%;
+  }
+}
+
+/* An image drawn once per theme (the slides' diagrams): show the one matching the page. */
+.theme-light-img {
+  display: none;
+}
+:root[data-theme="light"] .theme-light-img {
+  display: block;
+}
+:root[data-theme="light"] .theme-dark-img {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .theme-light-img {
+    display: block;
+  }
+  :root:not([data-theme="dark"]) .theme-dark-img {
+    display: none;
+  }
 }

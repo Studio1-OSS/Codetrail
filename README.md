@@ -2,7 +2,7 @@
 
 <h1 align="center">Codetrail</h1>
 
-<p align="center"><b>Architecture diagrams, wiki docs, code tours and Q&amp;A for any GitHub repo, from one link.</b><br>For a repo, a pull request or a folder on your machine. Open source, runs on DeepSeek V4.1 Flash 1017, and every line it points to is checked against the code.</p>
+<p align="center"><b>Architecture diagrams, wiki docs, code tours and Q&amp;A for any GitHub repo, from one link.</b><br>For a repo, a pull request or a folder on your machine. Open source, runs on Open model, and every line it points to is checked against the code.</p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" alt="Next.js 16">

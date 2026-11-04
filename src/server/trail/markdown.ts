@@ -12,6 +12,7 @@ import { onCode, type Atlas, type RepoSummary, type Tour, type TourIndexEntry } 
 import type { RepoInfo } from "@/server/repo/github";
 import { getJSON } from "@/server/store";
 import { storeKey, type ReadEntry } from "./service";
+import { withModels } from "@/lib/models";
 
 type At = { owner: string; repo: string; sha: string };
 
@@ -32,7 +33,7 @@ export async function repoMarkdown(at: At, site: string, summary?: Pick<RepoSumm
   const out: string[] = [
     `# ${at.owner}/${at.repo}`,
     "",
-    `> Read by Codetrail with DeepSeek V4.1 Flash 1017 at commit \`${at.sha.slice(0, 7)}\`${info.ref ? ` (${info.ref})` : ""}. Every file and line reference below was checked against the code. Interactive version: ${page}`,
+    `> Read by Codetrail${withModels([atlas.call])} at commit \`${at.sha.slice(0, 7)}\`${info.ref ? ` (${info.ref})` : ""}. Every file and line reference below was checked against the code. Interactive version: ${page}`,
     "",
     info.description ?? "",
     "",
@@ -82,7 +83,7 @@ export function llmsTxt(reads: ReadEntry[], site: string): string {
   return [
     "# Codetrail",
     "",
-    "> Architecture maps, checked code tours, docs and answers for code repositories, each read whole by DeepSeek V4.1 Flash 1017. Every file and line reference is checked against the code.",
+    "> Architecture maps, checked code tours, docs and answers for code repositories, each read whole by one open model. Every file and line reference is checked against the code.",
     "",
     "## Repositories",
     "",

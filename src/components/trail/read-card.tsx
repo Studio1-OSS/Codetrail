@@ -331,7 +331,7 @@ export function Reading({ summary, label, live, onStop }: { summary: RepoSummary
             </div>
           )}
           <p className="absolute bottom-3 left-4 font-mono text-[10.5px] tracking-[0.15em] text-fg-3 uppercase">
-            {graphNodes.length ? "the map, as DeepSeek writes it" : "files going into one prompt"}
+            {graphNodes.length ? `the map, as ${summary.modelLabel} writes it` : "files going into one prompt"}
           </p>
           {!graphNodes.length && !still && (
             <button onClick={() => setPaused((p) => !p)} aria-pressed={paused} className="absolute right-3 bottom-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-fg-3 hover:text-fg">

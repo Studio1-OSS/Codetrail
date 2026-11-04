@@ -139,22 +139,28 @@ async function complete(config: NebiusConfig, body: OpenAI.Chat.Completions.Chat
   let content = "";
   let reasoning = "";
   let finish: string | null | undefined;
-  for await (const chunk of stream) {
-    // Usage (cached tokens included) arrives on the last chunk.
-    if (chunk.usage) config.onUsage?.({ model: body.model, ms: Date.now() - started, ...usageOf(chunk.usage) });
-    const choice = chunk.choices?.[0];
-    if (!choice) continue;
-    const delta = choice.delta as { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
-    const r = delta.reasoning_content ?? delta.reasoning;
-    if (r) {
-      reasoning += r;
-      hooks.onReasoning?.(reasoning.length);
+  // Usage (cached tokens included) comes on the last chunk for some models and as a running total on every chunk
+  // for others (Kimi), so keep the latest and report it once, even when the stream stops part-way.
+  let usage: OpenAI.CompletionUsage | undefined;
+  try {
+    for await (const chunk of stream) {
+      if (chunk.usage) usage = chunk.usage;
+      const choice = chunk.choices?.[0];
+      if (!choice) continue;
+      const delta = choice.delta as { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
+      const r = delta.reasoning_content ?? delta.reasoning;
+      if (r) {
+        reasoning += r;
+        hooks.onReasoning?.(reasoning.length);
+      }
+      if (delta.content) {
+        content += delta.content;
+        hooks.onContent?.(content);
+      }
+      if (choice.finish_reason) finish = choice.finish_reason;
     }
-    if (delta.content) {
-      content += delta.content;
-      hooks.onContent?.(content);
-    }
-    if (choice.finish_reason) finish = choice.finish_reason;
+  } finally {
+    if (usage) config.onUsage?.({ model: body.model, ms: Date.now() - started, ...usageOf(usage) });
   }
   // An aborted stream can end quietly, part-way through: that's a Stop, never a finished reply to store.
   if (signal?.aborted) throw new CancelledError();

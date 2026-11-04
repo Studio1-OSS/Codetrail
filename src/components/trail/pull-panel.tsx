@@ -67,7 +67,7 @@ export function PullStart({ view, readSha, busy, live, onTour }: StartProps) {
       ) : (
         <>
           <p className="text-[13.5px] leading-relaxed text-fg-2">
-            DeepSeek already has this repo (read at {readSha.slice(0, 7)}). The tour adds only the change: {sent.patches} {sent.patches === 1 ? "patch" : "patches"}
+            Codetrail already has this repo (read at {readSha.slice(0, 7)}). The tour adds only the change: {sent.patches} {sent.patches === 1 ? "patch" : "patches"}
             {sent.head ? ` and the PR's version of ${sent.head} changed ${sent.head === 1 ? "file" : "files"}` : ""}, about {formatTokens(view.tokens)} tokens.
             {sent.left.length > 0 && ` ${sent.left.length} large ${sent.left.length === 1 ? "patch is" : "patches are"} left out to fit.`}
           </p>

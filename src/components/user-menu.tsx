@@ -95,7 +95,7 @@ export function SignInModal({ onClose }: { onClose: () => void }) {
   return (
     <Dialog title="Sign in to read a new repo" onClose={onClose}>
       <p className="text-[14px] leading-relaxed text-fg-2">
-        Reading a new repo or asking a question runs DeepSeek V4.1 Flash 1017 on our account. Sign in with GitHub for free daily reads and questions. Stored repos, tours and docs
+        Reading a new repo or asking a question runs the model on our account. Sign in with GitHub for free daily reads and questions. Stored repos, tours and docs
         stay free without signing in.
       </p>
       <button onClick={signInWithGitHub} className="mt-5 flex w-full items-center justify-center gap-2 rounded-[12px] bg-trail px-4 py-3 font-semibold text-[#16171a] hover:bg-trail-strong">

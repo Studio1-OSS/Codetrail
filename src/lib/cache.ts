@@ -22,6 +22,6 @@ export function warmthOf(ledger: CallRecord[], now = Date.now()): Warmth {
   return { state: "cold", lastAt: last, calls: 0 };
 }
 
-/** What the calls would have cost with no cached input at all. */
-export const uncachedCost = (ledger: CallRecord[], price: Price | null) =>
-  price ? ledger.reduce((a, c) => a + c.usage.input * price.input + c.usage.output * price.output, 0) : null;
+/** The price a call was made at: its own model's, falling back to the configured model's for older summaries. */
+export const priceOf = (call: Pick<CallRecord, "model">, summary: { model: string; price: Price | null; prices?: Record<string, Price> }) =>
+  summary.prices?.[call.model] ?? (call.model === summary.model ? summary.price : null);

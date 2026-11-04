@@ -1,5 +1,6 @@
 // Settings from the environment. No server-only import: the MCP server and scripts read it too.
 import { z } from "zod";
+import { DEFAULT_MODEL, modelLabel } from "./lib/models";
 
 const optional = z
   .string()
@@ -14,7 +15,7 @@ const schema = z.object({
   NEBIUS_MODEL: z
     .string()
     .optional()
-    .transform((v) => v?.trim() || "deepseek-ai/DeepSeek-V4.1-Flash-1017"),
+    .transform((v) => v?.trim() || DEFAULT_MODEL),
   GITHUB_TOKEN: optional,
   /** libsql URL: a local file by default, or libsql://… for Turso. */
   DATABASE_URL: z.string().default("file:codetrail.db"),
@@ -37,5 +38,5 @@ const schema = z.object({
 
 export const env = schema.parse(process.env);
 
-/** The model's name as people read it, everywhere in the UI and the README. */
-export const MODEL_LABEL = "DeepSeek V4.1 Flash 1017";
+/** The configured model's name as people read it. Stored work names the model that made it (src/lib/models.ts). */
+export const MODEL_LABEL = modelLabel(env.NEBIUS_MODEL);

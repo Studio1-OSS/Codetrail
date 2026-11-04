@@ -181,7 +181,7 @@ await click(ask, 300);
 await typeHuman(QUESTION);
 await pause(700);
 await page.keyboard.press("Enter");
-await waitFor(2, () => page.getByText("DeepSeek is reading the question…").waitFor({ state: "detached", timeout: 600_000 }).catch(() => {}));
+await waitFor(2, () => page.getByText("Reading the question…").waitFor({ state: "detached", timeout: 600_000 }).catch(() => {}));
 await waitFor(4, () => page.getByText("Ask a follow-up").first().waitFor({ timeout: 600_000 }));
 await pause(1200);
 check("the answer arrived", true);

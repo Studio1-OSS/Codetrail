@@ -316,6 +316,8 @@ export type RepoSummary = {
   model: string;
   modelLabel: string;
   price: Price | null;
+  /** Today's prices of every model on Token Factory, so a call made with an earlier model is priced as that model. */
+  prices?: Record<string, Price>;
   /** Dollars: map + main tour (one call), a tour served from the prompt cache, and one that misses it. */
   estimate: { firstRead: number | null; followUp: number | null; followUpCold: number | null };
   entries: string[];

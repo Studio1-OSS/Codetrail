@@ -42,7 +42,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Is it free?",
-    a: "Opening a repo someone already read is always free. On the hosted app, reading a new repo or asking a question needs a GitHub sign-in, with a free daily allowance. Self-hosted, you pay only for the model calls: about $0.03 to read a small repo, and under a cent for a follow-up once the repo is cached.",
+    a: "Opening a repo someone already read is always free. On the hosted app, reading a new repo or asking a question needs a GitHub sign-in, with a free daily allowance. Self-hosted, you pay only for the model calls. On DeepSeek V4.1 Flash 1017 that's about $0.03 to read a small repo and under a cent for a follow-up once the repo is cached; Kimi K3.1 Pro costs about 7× as much. The price shows before every call.",
   },
   {
     q: "Can it read private repos?",
@@ -66,7 +66,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can it explain a pull request?",
-    a: "Yes. Paste a PR link, or swap github.com for this site in its URL. DeepSeek already has the repo from its read, so the tour adds only the change: the patches and the PR's version of each changed file. You get the change in the order it runs, with the diff marked, and notes for the reviewer (risks, missing tests, questions), each tied to a line that was checked.",
+    a: "Yes. Paste a PR link, or swap github.com for this site in its URL. Codetrail already has the repo from its read, so the tour adds only the change: the patches and the PR's version of each changed file. You get the change in the order it runs, with the diff marked, and notes for the reviewer (risks, missing tests, questions), each tied to a line that was checked.",
   },
   {
     q: "Can my coding agent use it?",
@@ -106,7 +106,7 @@ const COMPARE: { cap: string; cells: [Cell, Cell, Cell, Cell, Cell] }[] = [
   { cap: "Works from a URL in the browser", cells: [y(), y(), y(), t("VS Code (desktop and web)"), t("VS Code")] },
   { cap: "MCP server for coding agents", cells: [y("Also a Claude Code plugin"), y(), y(), dash, dash] },
   { cap: "Open source", cells: [y("MIT"), y("MIT"), t("No"), y("MIT"), t("No")] },
-  { cap: "Private code", cells: [y("GitHub token or local folders; code goes to DeepSeek on your key"), y("With a GitHub token"), t("With a Devin account"), y("Local files"), t("Local folders; code goes to cloud models")] },
+  { cap: "Private code", cells: [y("GitHub token or local folders; code goes only to the model, on your key"), y("With a GitHub token"), t("With a Devin account"), y("Local files"), t("Local folders; code goes to cloud models")] },
   { cap: "Function-level call graph", cells: [y("JS/TS, Python, Go"), dash, dash, dash, y("From the language server")] },
   { cap: "Explainer video of a repo", cells: [dash, y(), dash, dash, dash] },
 ];

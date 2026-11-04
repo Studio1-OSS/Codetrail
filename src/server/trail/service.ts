@@ -3,7 +3,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { env, MODEL_LABEL } from "@/env";
 import { atlasJsonSchema, atlasSchema, onCode, tourJsonSchema, tourSchema, type Atlas, type CallRecord, type RepoSummary, type Step, type Tour, type TourAnswer, type TourIndexEntry } from "@/lib/schemas";
-import { getPrices, modelPrice, nebius } from "@/server/ai/client";
+import { getPrices, nebius } from "@/server/ai/client";
 import { AIError, chatJSON, type CallUsage, type Message, type StreamHooks } from "@/server/ai/nebius";
 import { costOf } from "@/server/ai/pricing";
 import { commitsAhead, downloadSnapshot, getRepoInfo, RepoError, type RepoInfo, type Snapshot } from "@/server/repo/github";
@@ -15,6 +15,7 @@ import { appendCall, fileFromStore, getCalls, getJSON, keysLike, loadSnapshot, p
 import { recordCall, spentToday } from "@/server/stats";
 import { AuthRequiredError, takeQuota, type QuotaKind } from "@/server/quota";
 import { savedBy } from "@/lib/cache";
+import { modelsOf } from "@/lib/models";
 import { inScope, parseScope, scopeHash, scopeLabel, scopeString } from "@/lib/scope";
 import { shared } from "@/server/inflight";
 
@@ -115,7 +116,8 @@ async function build(info: RepoInfo): Promise<Prepared> {
   const included = new Set([...pack.included, ...pack.compressed].map((f) => f.path));
   const files = new Map(snapshot.files.filter((f) => included.has(f.path)).map((f) => [f.path, f.text]));
 
-  const price = await modelPrice();
+  const prices = await getPrices();
+  const price = prices?.models[env.NEBIUS_MODEL] ?? null;
   const prefixTokens = pack.tokens + estimateTokens(graphSummary) + 1_500 + snapshot.images.length * 1_000;
   const summary: RepoSummary = {
     owner: info.owner,
@@ -142,6 +144,7 @@ async function build(info: RepoInfo): Promise<Prepared> {
     model: env.NEBIUS_MODEL,
     modelLabel: MODEL_LABEL,
     price,
+    prices: prices?.models ?? {},
     estimate: estimateFor(prefixTokens, price),
     entries: graph.entries,
     graphEdges: graph.edges.length,
@@ -501,13 +504,15 @@ type RepoSpend = {
   output: number;
   paid: number;
   saved: number;
+  /** The models behind these calls, by name. */
+  models: string[];
   tours: number;
   at: number;
 };
 
-/** Every traced repo with its real spend, from the stored ledgers. */
+/** Every traced repo with its real spend, from the stored ledgers. Savings use each call's own model's prices. */
 export async function getRepoSpend(): Promise<RepoSpend[]> {
-  const price = await modelPrice();
+  const prices = await getPrices();
   const out: RepoSpend[] = [];
   // Every read on this instance (not just the recent list), so nothing drops off the page.
   for (const r of await listReads()) {
@@ -527,7 +532,8 @@ export async function getRepoSpend(): Promise<RepoSpend[]> {
       cached,
       output: l.reduce((a, c) => a + c.usage.output, 0),
       paid: l.reduce((a, c) => a + (c.cost ?? 0), 0),
-      saved: price ? cached * (price.input - price.cached) : 0,
+      saved: l.reduce((a, c) => a + (c.saved ?? savedBy(c.usage, prices?.models[c.model] ?? null) ?? 0), 0),
+      models: modelsOf(l),
       tours: tours?.length ?? 0,
       at: r.at,
     });

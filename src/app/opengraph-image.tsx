@@ -1,13 +1,14 @@
 // The site's link preview: the headline over a dotted route, in the trail map style.
 import { ImageResponse } from "next/og";
 import { font } from "@/server/og";
+import { MODEL_LABEL } from "@/env";
 
-export const alt = "Codetrail: diagram, docs, code tour and Q&A for any GitHub repo, read whole by DeepSeek V4.1 Flash 1017";
+export const alt = `Codetrail: diagram, docs, code tour and Q&A for any GitHub repo, read whole by ${MODEL_LABEL}`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function Image() {
-  const lines = ["Every repo is a trail.", "Walk it.", "Diagram, docs, code tour and Q&A, in one link.", "DEEPSEEK V4.1 FLASH 1017 · READS THE WHOLE REPO", "codetrail"];
+  const lines = ["Every repo is a trail.", "Walk it.", "Diagram, docs, code tour and Q&A, in one link.", `${MODEL_LABEL.toUpperCase()} · READS THE WHOLE REPO`, "codetrail"];
   const text = lines.join("");
   const [light, bold] = await Promise.all([font("Martian Mono", 300, text), font("Martian Mono", 800, text)]).catch(() => [null, null]);
   return new ImageResponse(
@@ -31,7 +32,7 @@ export default async function Image() {
           <div style={{ fontSize: 64, fontWeight: 800, letterSpacing: -4, color: "#ffb020", lineHeight: 1.05 }}>Walk it.</div>
           <div style={{ marginTop: 26, fontSize: 26, color: "#a9abb2" }}>Diagram, docs, code tour and Q&A, in one link.</div>
         </div>
-        <div style={{ fontSize: 16, letterSpacing: 3, color: "#7a7d86" }}>DEEPSEEK V4.1 FLASH 1017 · READS THE WHOLE REPO</div>
+        <div style={{ fontSize: 16, letterSpacing: 3, color: "#7a7d86" }}>{`${MODEL_LABEL.toUpperCase()} · READS THE WHOLE REPO`}</div>
       </div>
     ),
     { ...size, fonts: light && bold ? [{ name: "Martian", data: light, weight: 300 }, { name: "Martian", data: bold, weight: 800 }] : undefined },

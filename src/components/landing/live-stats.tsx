@@ -46,11 +46,11 @@ export function LiveStats({ initial }: { initial: SiteTotals | null }) {
     const id = setInterval(load, 20_000);
     return () => clearInterval(id);
   }, []);
-  const t = totals ?? { reads: 0, tours: 0, replays: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0, usd: 0, savedUsd: 0 };
+  const t = totals ?? { reads: 0, tours: 0, calls: 0, replays: 0, inputTokens: 0, cachedTokens: 0, outputTokens: 0, usd: 0, savedUsd: 0, byModel: [] };
   return (
     <section className="border-b border-line">
       <div className="mx-auto max-w-[1240px] px-4 sm:px-6">
-        <p className="pt-6 font-mono text-[11px] tracking-[0.2em] text-trail uppercase">DeepSeek V4.1 Flash 1017 on Codetrail, live</p>
+        <p className="pt-6 font-mono text-[11px] tracking-[0.2em] text-trail uppercase">{t.byModel.map((m) => m.label).join(" + ") || "Open models"} on Codetrail, live</p>
         <div className="grid grid-cols-2 lg:grid-cols-4">
           <Stat label="Repos read whole" value={t.reads} format={(n) => Math.round(n).toLocaleString()} />
           <Stat label="Tours traced" value={t.tours} format={(n) => Math.round(n).toLocaleString()} />

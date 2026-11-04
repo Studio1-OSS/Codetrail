@@ -2,11 +2,12 @@
 
 <h1 align="center">Codetrail</h1>
 
-<p align="center"><b>Architecture diagrams, wiki docs, code tours and Q&amp;A for any GitHub repo, from one link.</b><br>For a repo, a pull request or a folder on your machine. Open source, runs on Open model, and every line it points to is checked against the code.</p>
+<p align="center"><b>Architecture diagrams, wiki docs, code tours and Q&amp;A for any GitHub repo, from one link.</b><br>For a repo, a pull request or a folder on your machine. Open source, runs on the open model you pick (DeepSeek V4.1 Flash 1017 or Kimi K3.1 Pro), and every line it points to is checked against the code.</p>
 
 <p align="center">
 <img src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white" alt="Next.js 16">
 <a href="https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=deepseek-ai/DeepSeek-V4.1-Flash-1017"><img src="https://img.shields.io/badge/model-DeepSeek%20V4.1%20Flash%201017-7a5fd6" alt="DeepSeek V4.1 Flash 1017"></a>
+<a href="https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=moonshotai/Kimi-K3.1-Pro"><img src="https://img.shields.io/badge/model-Kimi%20K3.1%20Pro-1f6feb" alt="Kimi K3.1 Pro"></a>
 <a href="https://dub.sh/aistudio"><img src="https://img.shields.io/badge/models-Nebius%20Token%20Factory-e0ff4f?labelColor=0b0b0b" alt="Nebius Token Factory"></a>
 <img src="https://img.shields.io/badge/MCP-server-262626" alt="MCP server">
 <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
@@ -24,9 +25,9 @@
   <img src="docs/screenshots/tour.png" alt="Codetrail on honojs/hono: the architecture diagram in its layers with the tour's steps marked, the current step's explanation, and the checked lines in the code">
 </picture>
 
-Getting to know a new codebase usually means hours of clicking through files. Codetrail hands the whole repo to **[DeepSeek V4.1 Flash 1017](https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=deepseek-ai/DeepSeek-V4.1-Flash-1017)** in one prompt. With a 1M-token context there's no search index guessing which pieces matter: the model sees every file. It draws the map of modules, walks you through how the code actually runs, step by step, and answers your questions. Each step quotes a real line of code, and Codetrail finds that line in the file before showing it.
+Getting to know a new codebase usually means hours of clicking through files. Codetrail hands the whole repo to an open model in one prompt: **[DeepSeek V4.1 Flash 1017](https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=deepseek-ai/DeepSeek-V4.1-Flash-1017)** (the default) or **[Kimi K3.1 Pro](https://tokenfactory.nebius.com/?modals=endpoint-details&model-id=moonshotai/Kimi-K3.1-Pro)**. Both have a 1M-token context, so there's no search index guessing which pieces matter: the model sees every file. It draws the map of modules, walks you through how the code actually runs, step by step, and answers your questions. Each step quotes a real line of code, and Codetrail finds that line in the file before showing it.
 
-It's open source and runs on your own [Nebius Token Factory](https://dub.sh/aistudio) key. A small repo costs 1–3 cents to read, and everything it writes is saved, so the next visit is free.
+It's open source and runs on your own [Nebius Token Factory](https://dub.sh/aistudio) key. On DeepSeek V4.1 Flash 1017 a small repo costs 1–3 cents to read; Kimi K3.1 Pro, a much larger model, costs about 7× as much per token. Everything it writes is saved, so the next visit is free.
 
 ## What you get
 
@@ -89,7 +90,7 @@ Codetrail does the jobs of four tools people use to understand a codebase. GitDi
 | Works from a URL in the browser | Yes | Yes | Yes | VS Code (desktop and web) | VS Code |
 | MCP server for coding agents | Yes, also a Claude Code plugin | Yes | Yes | — | — |
 | Open source | Yes, MIT | Yes, MIT | No | Yes, MIT | No |
-| Private code | Private repos with a GitHub token, and local folders; the code goes to DeepSeek on your Nebius key | With a GitHub token | With a Devin account | Local files | Local folders; code goes to cloud models |
+| Private code | Private repos with a GitHub token, and local folders; the code goes only to the model you pick, on your Nebius key | With a GitHub token | With a Devin account | Local files | Local folders; code goes to cloud models |
 | Function-level call graph | JS/TS, Python, Go, from the code | — | — | — | Yes, from the language server |
 | Explainer video of a repo | — | Yes | — | — | — |
 
@@ -97,7 +98,7 @@ Checked in October 2026 against each tool's own docs and code. Where the others 
 
 ## How it works
 
-Every call sends the same prefix, the whole repo with numbered lines, so after the first read the repo can be billed as cached input ($0.006 per 1M tokens instead of $0.30). Code, not the model, checks every step, builds the import graph and does the pricing. A small repo costs 1–3 cents to read: polka's map and main tour cost $0.028, and an extra tour on zustand with the repo cached cost $0.005. **[How it works, measured costs and the tech stack](docs/how-it-works.md)**.
+Every call sends the same prefix, the whole repo with numbered lines, so after the first read the repo can be billed as cached input: $0.006 per 1M tokens instead of $0.30 on DeepSeek V4.1 Flash 1017, $0.20 instead of $2.00 on Kimi K3.1 Pro. Code, not the model, checks every step, builds the import graph and does the pricing. On DeepSeek, polka's map and main tour cost $0.028, and an extra tour on zustand with the repo cached cost $0.005. On Kimi, koa's 110K-token read costs $0.28 at full price. **[How it works, measured costs and the tech stack](docs/how-it-works.md)**.
 
 ## Run it
 
@@ -118,7 +119,9 @@ cp .env.example .env      # add NEBIUS_API_KEY
 pnpm dev
 ```
 
-Then open **http://localhost:3000**. Local folders, private repos, hosted mode and scripts: **[self-hosting](docs/self-hosting.md)**. A walk through every part of the app: the **[user guide](docs/user-guide.md)**.
+Then open **http://localhost:3000**. To run on Kimi K3.1 Pro instead of DeepSeek V4.1 Flash 1017, set `NEBIUS_MODEL=moonshotai/Kimi-K3.1-Pro` (in `.env`, or `-e` with Docker). Every call records its model, so receipts and the data page stay right after a switch.
+
+Local folders, private repos, hosted mode and scripts: **[self-hosting](docs/self-hosting.md)**. A walk through every part of the app: the **[user guide](docs/user-guide.md)**.
 
 ## Use it from your coding agent
 

@@ -196,7 +196,7 @@ export function TrailApp({ owner, repo, gitRef, initialFile, pull, siteUrl, scop
   const fail = useCallback((e: unknown, retry?: () => void) => {
     if (needsSignIn(e)) return setSignIn(true);
     const stopped = wasStopped(e);
-    setProblem({ text: stopped ? "Stopped. Whatever DeepSeek had already read may still be billed." : (e as Error).message, retry, stopped });
+    setProblem({ text: stopped ? "Stopped. Whatever the model had already read may still be billed." : (e as Error).message, retry, stopped });
   }, []);
 
   const openTour = useCallback(
@@ -1101,7 +1101,7 @@ const leaving = <A extends unknown[]>(f: (...a: A) => unknown) =>
               <Loader2 className="size-4 shrink-0 animate-spin text-trail" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-fg">{docsBusy || !answer ? tracing : `Answering: ${tracing}`}</p>
-                <p className="text-xs text-fg-3">DeepSeek already has this repo, so this is usually quick and cheap.</p>
+                <p className="text-xs text-fg-3">Codetrail already has this repo, so this is usually quick and cheap.</p>
               </div>
               <StopButton onStop={stopRun} />
             </div>
@@ -1482,7 +1482,7 @@ function EvidencePanel({ route, atlas, onOpen, onClose }: { route: LinkInfo; atl
 
 function StopButton({ onStop }: { onStop: () => void }) {
   return (
-    <button onClick={onStop} title="Stop this call. If no one else is waiting on it, DeepSeek stops writing." className="inline-flex shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-panel px-2.5 py-1.5 font-mono text-[11.5px] text-fg-2 hover:border-danger/60 hover:text-fg">
+    <button onClick={onStop} title="Stop this call. If no one else is waiting on it, the model stops writing." className="inline-flex shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-panel px-2.5 py-1.5 font-mono text-[11.5px] text-fg-2 hover:border-danger/60 hover:text-fg">
       <Square className="size-3 fill-current" /> Stop
     </button>
   );

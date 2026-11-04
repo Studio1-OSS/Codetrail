@@ -2,17 +2,17 @@
 
 import { X } from "lucide-react";
 import { useRef } from "react";
-import { uncachedCost } from "@/lib/cache";
+import { priceOf, savedBy } from "@/lib/cache";
 import { cachedShare, formatTokens, formatUsd, perMillion, seconds } from "@/lib/format";
+import { modelLabel, modelsOf } from "@/lib/models";
 import type { CallRecord, RepoSummary } from "@/lib/schemas";
 import { useModal } from "./dialog";
 import { Receipt } from "./receipt";
 
 const totalCost = (ledger: CallRecord[]) => ledger.reduce((a, c) => a + (c.cost ?? 0), 0);
-const totalSaved = (ledger: CallRecord[], summary: RepoSummary) => {
-  const without = uncachedCost(ledger, summary.price);
-  return without === null ? 0 : Math.max(0, without - totalCost(ledger));
-};
+/** Each call at its own model's prices, so a repo read with one model and asked with another adds up right. */
+const totalSaved = (ledger: CallRecord[], summary: RepoSummary) =>
+  ledger.reduce((a, c) => a + Math.max(0, c.saved ?? savedBy(c.usage, priceOf(c, summary)) ?? 0), 0);
 
 export function CostPill({ ledger, summary, onOpen }: { ledger: CallRecord[]; summary: RepoSummary; onOpen: () => void }) {
   return (
@@ -65,7 +65,7 @@ export function CostDrawer({ open, onClose, ledger, summary }: { open: boolean; 
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div>
             <h2 className="font-display text-[20px] font-medium tracking-tight [font-stretch:85%]">What this repo cost</h2>
-            <p className="text-xs text-fg-3">Every call to {summary.modelLabel}, priced live from Nebius Token Factory.</p>
+            <p className="text-xs text-fg-3">Every call to {ledger.length ? modelsOf(ledger).join(" and ") : summary.modelLabel}, priced live from Nebius Token Factory.</p>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-fg-3 hover:bg-raised hover:text-fg" aria-label="Close">
             <X className="size-4" />
@@ -96,7 +96,7 @@ export function CostDrawer({ open, onClose, ledger, summary }: { open: boolean; 
           ) : (
             <div className="space-y-5">
               {[...ledger].reverse().map((c) => (
-                <Receipt key={c.id} call={c} price={p} model={summary.modelLabel} title={c.kind === "atlas" ? "Read the repo: map + main tour" : c.label} />
+                <Receipt key={c.id} call={c} price={priceOf(c, summary)} model={modelLabel(c.model)} title={c.kind === "atlas" ? "Read the repo: map + main tour" : c.label} />
               ))}
             </div>
           )}

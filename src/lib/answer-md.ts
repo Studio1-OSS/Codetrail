@@ -5,6 +5,7 @@ import type { ElementNode } from "@openuidev/lang-core";
 import { parseAnswer } from "./answer-lib";
 import { refKey, type StoredAnswer } from "./answer-schema";
 import { blobUrl, mdLink } from "./ref";
+import { withModels } from "./models";
 
 type At = { owner: string; repo: string; sha: string };
 const cell = (s: unknown) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -52,7 +53,7 @@ export function answerToMarkdown(answer: StoredAnswer, at: At, code: Record<stri
     }
   }
   if (props.followUps?.length) out.push("## Ask next", "", ...props.followUps.map((q) => `- ${q}`), "");
-  out.push(`Answered by Codetrail with DeepSeek V4.1 Flash 1017 at commit ${at.sha.slice(0, 7)}; every linked reference was checked against the code.`);
+  out.push(`Answered by Codetrail${withModels(answer.calls)} at commit ${at.sha.slice(0, 7)}; every linked reference was checked against the code.`);
   return out.join("\n");
 }
 

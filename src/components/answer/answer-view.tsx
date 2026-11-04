@@ -60,7 +60,7 @@ export function AnswerView({
       {stage && <ResearchProgress stage={stage} />}
       <div className="mt-2.5" aria-busy={streaming} aria-live="off">
         <AnswerContext.Provider value={{ checks: answer?.checks ?? null, onOpen }}>
-          {text ? <Renderer response={text} library={answerLibrary} isStreaming={streaming} /> : !stage && <p className="text-sm text-fg-3">DeepSeek is reading the question…</p>}
+          {text ? <Renderer response={text} library={answerLibrary} isStreaming={streaming} /> : !stage && <p className="text-sm text-fg-3">Reading the question…</p>}
         </AnswerContext.Provider>
       </div>
       {!streaming && answer?.research && <ResearchTrail research={answer.research} />}

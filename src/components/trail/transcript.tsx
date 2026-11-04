@@ -8,6 +8,7 @@ import { onCode, type RepoSummary, type Tour } from "@/lib/schemas";
 import { blobUrl, mdLink as link } from "@/lib/ref";
 import { Dialog } from "./dialog";
 import { copyText } from "@/lib/announce";
+import { withModels } from "@/lib/models";
 
 /** The commit a step's file is shown at: a PR tour's changed files at the PR's head, everything else at the read. */
 const shaFor = (tour: Tour, s: RepoSummary, file: string) => (tour.pull?.files.some((f) => f.path === file && f.status !== "removed") ? tour.pull.headSha : s.sha);
@@ -35,7 +36,7 @@ function tourToMarkdown(tour: Tour, s: RepoSummary, files: Record<string, string
       "",
       ...(files[st.file] ? [...fence(files[st.file].slice(st.startLine - 1, st.endLine), st.file), ""] : []),
     ]),
-    `Explained by Codetrail with DeepSeek V4.1 Flash 1017 at commit ${at.slice(0, 7)}; every line range was checked against the code.`,
+    `Explained by Codetrail${withModels(tour.calls)} at commit ${at.slice(0, 7)}; every line range was checked against the code.`,
   ].join("\n");
 }
 

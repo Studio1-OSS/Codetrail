@@ -1,11 +1,11 @@
 // The trail card: a 1200×630 image of a tour (route over the module map, hike-style stats, an elevation
 // profile of where in each file the steps sit). Used for sharing and as the link preview.
 import { ImageResponse } from "next/og";
-import { MODEL_LABEL } from "@/env";
 import { font } from "@/server/og";
 import { KIND_COLOR, SUPPORT } from "@/lib/palette";
 import { onCode, type Tour } from "@/lib/schemas";
 import { getLedger, getStoredAtlas, getStoredTour, getTourIndex, latestReadSha, prepare } from "@/server/trail/service";
+import { modelLabel } from "@/lib/models";
 
 export const maxDuration = 60;
 
@@ -35,6 +35,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
   // Text-only steps have no place on the map or in a file.
   const steps = (tour?.steps ?? []).filter(onCode);
   const call = tour?.calls[0];
+  // The model that read this repo (the map behind the card), not whichever one is configured today.
+  const model = modelLabel(atlas?.call.model).toUpperCase();
   const record = call ? ledger.find((c) => c.id === call.id) ?? call : null;
   const pull = tour?.pull;
   const stats = pull
@@ -74,7 +76,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
   const linePath = pts.map((q, i) => `${i ? "L" : "M"}${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ");
   const areaPath = pts.length ? `${linePath} L${pts.at(-1)!.x.toFixed(1)},${H} L${pts[0].x.toFixed(1)},${H} Z` : "";
 
-  const text = `${title}${owner}${repo}codetrail${stats.map((s) => s.label + s.value).join("")}${nodes.map((n) => n.label).join("")}${MODEL_LABEL}WHERE IN THE FILE EACH STEP SITS0123456789/·.$ READ WHOLE BY PR #+-`;
+  const text = `${title}${owner}${repo}codetrail${stats.map((s) => s.label + s.value).join("")}${nodes.map((n) => n.label).join("")}${model}WHERE IN THE FILE EACH STEP SITS0123456789/·.$ READ WHOLE BY PR #+-`;
   // Subset the font to the characters used, in both cases (labels are upper-cased).
   const glyphs = [...new Set(text + text.toUpperCase())].join("");
   const [mono, monoBold] = await Promise.all([font("Martian Mono", 400, glyphs), font("Martian Mono", 700, glyphs)]).catch(() => [null, null]);
@@ -138,7 +140,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ owner: s
               </div>
             )}
             <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontSize: 12, color: FG3 }}>
-              <span>{`READ WHOLE BY ${MODEL_LABEL.toUpperCase()}`}</span>
+              <span>{`READ WHOLE BY ${model}`}</span>
               <span style={{ color: TRAIL }}>{`codetrail · ${owner}/${repo}`}</span>
             </div>
           </div>

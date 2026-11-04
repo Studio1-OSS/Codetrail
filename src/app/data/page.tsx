@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MODEL_LABEL } from "@/env";
 import { SiteHeader } from "@/components/site-header";
 import { formatTokens, formatUsd, timeAgo } from "@/lib/format";
 import { LOCAL_OWNER } from "@/lib/ref";
@@ -83,7 +82,9 @@ export default async function DataPage() {
                         {r.owner === LOCAL_OWNER ? "this machine" : r.owner}/{r.repo}
                         {r.scope && <span className="ml-2 text-[11px] text-trail">{scopeLabel(parseScope(r.scope))}</span>}
                       </Link>
-                      <span className="font-mono text-[11px] text-fg-3">{formatUsd(r.paid + r.saved)} without the cache</span>
+                      <span className="font-mono text-[11px] text-fg-3">
+                        {r.models.join(" + ")} · {formatUsd(r.paid + r.saved)} without the cache
+                      </span>
                     </div>
                     <div className="mt-2 grid grid-cols-[minmax(0,1fr)_76px] items-center gap-x-3 gap-y-1.5">
                       <div className="h-2.5 rounded-r bg-line" aria-hidden title={`Spent ${formatUsd(r.paid)}`}>
@@ -109,7 +110,7 @@ export default async function DataPage() {
 
           <section aria-labelledby="site" className="min-w-0 flex-[1_1_320px] self-start rounded-card border border-line bg-panel p-6">
             <h2 id="site" className="font-display text-[20px] leading-tight font-medium tracking-tight [font-stretch:85%]">
-              {MODEL_LABEL} across Codetrail
+              Model calls across Codetrail
             </h2>
             <dl className="mt-4">
               {[
@@ -128,7 +129,22 @@ export default async function DataPage() {
                 </div>
               ))}
             </dl>
-            <p className="mt-3 text-[12px] text-fg-3">Since stats began on this instance. Prices live from Nebius Token Factory.</p>
+            {(totals?.byModel.length ?? 0) > 0 && (
+              <>
+                <h3 className="mt-5 font-mono text-[11px] tracking-[0.15em] text-fg-3 uppercase">By model</h3>
+                <dl className="mt-2">
+                  {totals!.byModel.map((m) => (
+                    <div key={m.model} className="border-t border-line py-2.5 text-[14px]">
+                      <dt className="text-fg">{m.label}</dt>
+                      <dd className="mt-0.5 font-mono text-[12px] text-fg-2">
+                        {m.calls} {m.calls === 1 ? "call" : "calls"} · {formatUsd(m.usd)} spent · {formatUsd(m.savedUsd)} saved
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+            <p className="mt-3 text-[12px] text-fg-3">Since stats began on this instance. Prices live from Nebius Token Factory, each call at its own model&apos;s prices.</p>
           </section>
         </div>
 
@@ -138,10 +154,11 @@ export default async function DataPage() {
             Repos read
           </h2>
           <div className="relative mt-3 overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-[14px]">
+            <table className="w-full min-w-[1100px] border-collapse text-[14px]">
               <thead>
                 <tr className="border-b border-line font-mono text-[11px] tracking-[0.1em] text-fg-3 uppercase">
                   <th scope="col" className="py-2.5 pr-3 text-left font-normal">Repo</th>
+                  <th scope="col" className="px-3 text-left font-normal">Model</th>
                   <th scope="col" className="px-3 text-right font-normal">Calls</th>
                   <th scope="col" className="px-3 text-right font-normal">Tokens read</th>
                   <th scope="col" className="px-3 text-left font-normal">From cache</th>
@@ -163,6 +180,7 @@ export default async function DataPage() {
                           {r.scope && <span className="ml-2 text-[11px] text-trail">{scopeLabel(parseScope(r.scope))}</span>}
                         </Link>
                       </th>
+                      <td className="px-3 text-[13px] whitespace-nowrap text-fg-2">{r.models.join(" + ") || "—"}</td>
                       <td className="px-3 text-right font-mono text-fg-2">{r.calls}</td>
                       <td className="px-3 text-right font-mono text-fg-2">{formatTokens(r.input)}</td>
                       <td className="px-3">

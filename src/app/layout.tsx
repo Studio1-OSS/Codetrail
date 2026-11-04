@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { env } from "@/env";
+import { env, MODEL_LABEL } from "@/env";
 import { Geist, Geist_Mono, Martian_Mono } from "next/font/google";
 import { themeScript } from "@/components/theme-toggle";
 import "./globals.css";
@@ -9,14 +9,14 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 const martian = Martian_Mono({ subsets: ["latin"], axes: ["wdth"], variable: "--font-martian" });
 
 const description =
-  "Paste any GitHub repo. DeepSeek V4.1 Flash 1017 reads every file at once and gives you an architecture diagram, wiki docs, guided code tours and answers about the code, with every reference checked.";
+  `Paste any GitHub repo. ${MODEL_LABEL} reads every file at once and gives you an architecture diagram, wiki docs, guided code tours and answers about the code, with every reference checked.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(env.SITE_URL),
   title: { default: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", template: "%s · Codetrail" },
   description,
   applicationName: "Codetrail",
-  keywords: ["code tour", "codebase walkthrough", "architecture diagram", "wiki", "codebase wiki", "repo docs", "AI code docs", "GitHub repo explorer", "DeepSeek", "DeepWiki alternative", "GitDiagram alternative", "CodeTour", "MCP"],
+  keywords: ["code tour", "codebase walkthrough", "architecture diagram", "wiki", "codebase wiki", "repo docs", "AI code docs", "GitHub repo explorer", "DeepSeek", "Kimi", "open model", "DeepWiki alternative", "GitDiagram alternative", "CodeTour", "MCP"],
   alternates: { canonical: "/" },
   openGraph: { type: "website", siteName: "Codetrail", url: "/", title: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", description },
   twitter: { card: "summary_large_image", title: "Codetrail: understand any GitHub repo, diagram, wiki, tours and Q&A", description },

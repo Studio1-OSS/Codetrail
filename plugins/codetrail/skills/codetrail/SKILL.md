@@ -5,7 +5,7 @@ description: Use before reading or changing unfamiliar code in a GitHub repo or 
 
 # Codetrail
 
-Codetrail reads a whole repo in one prompt (DeepSeek V4.1 Flash 1017, 1M-token context) and checks every line it points at against the real file. Results are stored per commit, so asking again is free.
+Codetrail reads a whole repo in one prompt (DeepSeek V4.1 Flash 1017 or Kimi K3.1 Pro, 1M-token context) and checks every line it points at against the real file. Results are stored per commit, so asking again is free.
 
 ## Which tool
 

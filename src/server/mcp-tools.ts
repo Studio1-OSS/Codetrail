@@ -17,6 +17,7 @@ import { docsToMarkdown } from "@/lib/docs-schema";
 import { searchFiles } from "@/server/store";
 import { getStoredDocs } from "@/server/trail/docs";
 import { commitKey, getAtlas, getTour, latestReadSha, listReads, prepare, type Prepared } from "@/server/trail/service";
+import { MODEL_LABEL } from "@/env";
 
 const text = (t: string) => ({ content: [{ type: "text" as const, text: t }] });
 const blob = (p: Prepared, path: string, start?: number, end?: number) => blobUrl(p.info.owner, p.info.repo, p.info.sha, path, start, end ?? start) ?? `${path}${start ? `:${start}-${end ?? start}` : ""}`;
@@ -128,7 +129,7 @@ server.registerTool(
   {
     title: "Map a GitHub repository",
     description:
-      "Reads a whole GitHub repo (or _local/<folder> on a self-hosted Codetrail) with DeepSeek V4.1 Flash 1017 (1M-token context) and returns its modules, their key files, how they connect (marked when confirmed by real imports) and suggested tours. Stored per commit, so asking again is free.",
+      `Reads a whole GitHub repo (or _local/<folder> on a self-hosted Codetrail) with ${MODEL_LABEL} (1M-token context) and returns its modules, their key files, how they connect (marked when confirmed by real imports) and suggested tours. Stored per commit, so asking again is free.`,
     inputSchema: { repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, a github.com URL, or _local/<folder> when self-hosted") },
   },
   async ({ repo }) => {
@@ -162,7 +163,7 @@ server.registerTool(
   {
     title: "Ask about a repository",
     description:
-      "Answers a question about a GitHub repo (or _local/<folder>) from a whole-repo read by DeepSeek V4.1 Flash 1017: a short answer with code references checked against the real files, and questions to ask next. Pass the returned thread id to ask a follow-up in context. Answers are stored, so asking again is free.",
+      `Answers a question about a GitHub repo (or _local/<folder>) from a whole-repo read by ${MODEL_LABEL}: a short answer with code references checked against the real files, and questions to ask next. Pass the returned thread id to ask a follow-up in context. Answers are stored, so asking again is free.`,
     inputSchema: {
       repo: z.string().min(3).max(300).describe("owner/repo, owner/repo@ref, a github.com URL, or _local/<folder> when self-hosted"),
       question: z.string().min(3).max(300),

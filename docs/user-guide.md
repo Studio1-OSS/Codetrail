@@ -28,7 +28,7 @@ How to run Codetrail on your machine and use every part of it. For what it is an
 | **Review a pull request** | Open the PR's link. The [PR tour](#9-pull-requests) walks through the change in the order it runs, with the diff and notes on risks and missing tests. |
 | **Onboard a teammate** | [Write a tour](#5-tours) of the parts they need, or edit a generated one, and send them the link. Export it to `.tours/` so it lives in the repo for VS Code CodeTour. |
 | **Document a project** | Write the docs, export them as Markdown, and [embed](#4-the-map) the live architecture image and badge in the README. |
-| **Settle a hard question** | Ask it in [Research](#6-ask-questions) mode: DeepSeek plans what to find out, looks in up to three rounds, then answers with checked references. |
+| **Settle a hard question** | Ask it in [Research](#6-ask-questions) mode: the model plans what to find out, looks in up to three rounds, then answers with checked references. |
 | **Hand context to an AI chat** | **Copy as a prompt** (on a module, a tour, an answer, or the map's Export menu) gives the architecture and the code references, ready to paste. |
 | **Present a codebase** | Open the [slides](#7-docs): the architecture, every module and the main tour, with keys and full screen, or downloaded as one HTML file. |
 | **Keep tours useful as the code changes** | Read the newer commit. Every tour [comes along](#5-tours), its steps moved with their code and any changed step flagged. |
@@ -71,6 +71,7 @@ Optional settings (in `.env`, or as `-e` flags with Docker):
 | --- | --- |
 | `GITHUB_TOKEN` | Raises GitHub's limit from 60 to 5,000 requests an hour, and opens private repos the token can read. A fine-grained token with "Contents: read" is enough. |
 | `LOCAL_ROOT` | A folder of your projects (from source). Each folder inside it can be opened in Codetrail. Docker uses the `/repos` mount instead. |
+| `NEBIUS_MODEL` | Which open model reads the code: `deepseek-ai/DeepSeek-V4.1-Flash-1017` (the default) or `moonshotai/Kimi-K3.1-Pro`, which costs about 7× as much per token. |
 | `MAX_REPO_TOKENS` | The most of a repo sent in one read (default 700,000 tokens). |
 | `DAILY_BUDGET_USD` | Stops new model calls for the day after this much spend. Empty means no cap. |
 
@@ -100,7 +101,7 @@ A repo you haven't read yet opens on the **Ready to read** screen. Nothing has b
 
 **Choose folders** reads only part of the repo, which helps with a big monorepo. Untick folders to leave them out, or type the only ones to read (folders or globs such as `packages/*/src`). The estimate follows as you choose; **Apply** opens that read at `/owner/repo?only=src&skip=src/legacy`. A read of some folders is stored apart from the full read, so the same commit can be read both ways; the header shows which folders a read covers, and clicking that label goes back to the whole repo.
 
-Press **Read the repo**. DeepSeek V4.1 Flash 1017 reads every file in one call, and you watch the map build as it writes: modules appear, then the links between them, then the steps of the first tour. A small repo takes 10–20 seconds.
+Press **Read the repo**. The model (DeepSeek V4.1 Flash 1017, or Kimi K3.1 Pro if you set it) reads every file in one call, and you watch the map build as it writes: modules appear, then the links between them, then the steps of the first tour. A small repo takes 10–20 seconds.
 
 ## 4. The map
 
@@ -172,9 +173,9 @@ Type a question in **Ask how something works**, at the bottom of the sidebar.
   - **Answer**: a short structured answer with tables, file lists, call sequences and code references, each checked against the code.
   - **Tour**: a step-by-step walk. "Walk me through…" and "what happens when…" pick this.
   - **Thorough**: a slower, more thorough answer that traces across every file involved. It costs more.
-  - **Research**: for questions one pass can't settle. DeepSeek first plans what to find out, then looks in up to three rounds (each sees what the earlier ones found, and it stops early when there's nothing new), then writes the answer with every reference checked. You see each stage as it runs; afterwards the plan and each round stay openable under the answer. It's a few calls on the cached repo, so it costs a few answers, and its price shows before you ask. It answers new questions, not follow-ups.
+  - **Research**: for questions one pass can't settle. The model first plans what to find out, then looks in up to three rounds (each sees what the earlier ones found, and it stops early when there's nothing new), then writes the answer with every reference checked. You see each stage as it runs; afterwards the plan and each round stay openable under the answer. It's a few calls on the cached repo, so it costs a few answers, and its price shows before you ask. It answers new questions, not follow-ups.
 - **The price** for that kind of question is shown under the box before you ask: what it costs if the repo is in the cache, and the most it can cost.
-- **Stop** ends a question, tour, docs or read you no longer want. If no one else is waiting on the same call, DeepSeek stops writing; whatever it had already read may still be billed. A stopped or failed question goes back into the box, with **Start again** or **Retry** next to the message.
+- **Stop** ends a question, tour, docs or read you no longer want. If no one else is waiting on the same call, the model stops writing; whatever it had already read may still be billed. A stopped or failed question goes back into the box, with **Start again** or **Retry** next to the message.
 
 **Follow-ups.** Under every answer, **Copy as a prompt** gives the answer with the architecture, ready for any AI chat. Under every answer and repo tour there are suggested follow-up questions (each with its price) and an **Ask a follow-up** box. Pull-request tours don't take follow-ups: the model would see the repo before the change, not the PR's code. A follow-up gets a short recap of the conversation, so the answer builds on what was already said. A follow-up already asked from the same answer or tour (a suggested one, say) replays free, like any stored question. The conversation's questions appear as numbered pills, so you can go back to any of them. Conversations are listed in the sidebar and have their own link.
 
@@ -198,7 +199,7 @@ The code panel's header has **copy** (the highlighted lines, or the whole file),
 
 Open a PR with its link, `owner/repo#123`, or the **Tour a PR** box in the sidebar. The repo needs to be read once first, and the PR page offers that if it hasn't been.
 
-- **Before anything is spent**, the PR page shows the title, author, size and state, how much will be sent (the patches and the PR's version of each changed file), and the estimate. Because DeepSeek already has the repo, only the change is new input.
+- **Before anything is spent**, the PR page shows the title, author, size and state, how much will be sent (the patches and the PR's version of each changed file), and the estimate. Because Codetrail already has the repo, only the change is new input.
 - **Tour this PR** walks through the change in the order it runs:
   - Changed lines are marked in the code: green for added, a red rule where lines were removed.
   - **diff** shows the patch.

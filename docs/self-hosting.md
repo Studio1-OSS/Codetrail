@@ -26,6 +26,7 @@ Then open **http://localhost:3000**. What each part does:
 | --- | --- |
 | `-p 3000:3000` | Opens the app at localhost:3000 |
 | `-e NEBIUS_API_KEY=…` | Your key, used for the model calls. Add `-e GITHUB_TOKEN=…` for private GitHub repos and GitHub's higher rate limit |
+| `-e NEBIUS_MODEL=…` | Optional. `moonshotai/Kimi-K3.1-Pro` runs on Kimi K3.1 Pro instead of the default, DeepSeek V4.1 Flash 1017 |
 | `-v codetrail-data:/data` | A Docker volume that keeps the database (repos read, tours, answers, costs) when the container stops or you update it |
 | `-v ~/code:/repos:ro` | Optional. Shares a folder of your projects, read-only. Each folder inside it appears under **Your folders** on the home page, uncommitted changes included |
 

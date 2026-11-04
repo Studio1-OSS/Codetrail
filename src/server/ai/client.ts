@@ -1,7 +1,7 @@
 // The configured model and its live price. Prices come from Token Factory's own list and are re-read hourly.
 import { env } from "@/env";
 import type { CallUsage, NebiusConfig } from "./nebius";
-import { fetchPrices, type ModelPrice, type PriceList } from "./pricing";
+import { fetchPrices, type PriceList } from "./pricing";
 
 let prices: { at: number; list: Promise<PriceList | null> } | undefined;
 
@@ -16,10 +16,6 @@ export function getPrices(): Promise<PriceList | null> {
     prices = { at: Date.now(), list };
   }
   return prices.list;
-}
-
-export async function modelPrice(): Promise<ModelPrice | null> {
-  return (await getPrices())?.models[env.NEBIUS_MODEL] ?? null;
 }
 
 export function nebius(onUsage?: (u: CallUsage) => void): NebiusConfig {

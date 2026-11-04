@@ -322,7 +322,7 @@ export function TrailGraph({ atlas, summary, tour, step, selected, onSelect, exp
               setGrouping(true);
               onGroupLayers().finally(() => setGrouping(false));
             }}
-            title="Ask DeepSeek to group these modules into architecture layers. Only the module list is sent, not the repo."
+            title="Ask the model to group these modules into architecture layers. Only the module list is sent, not the repo."
             className="rounded-[9px] border border-trail/50 bg-panel/90 px-2.5 py-1.5 font-mono text-[11px] text-fg hover:border-trail disabled:opacity-60"
           >
             {grouping ? "Grouping into layers…" : `Group into layers${layersCost ? ` · ≈ ${formatUsd(layersCost)}` : ""}`}

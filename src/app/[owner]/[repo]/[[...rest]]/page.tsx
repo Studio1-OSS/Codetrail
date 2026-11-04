@@ -35,7 +35,7 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
   const title = `${owner}/${repo}: architecture diagram, wiki and code tours`;
   const description = overview
     ? `${overview.summary.slice(0, 150).replace(/\s+\S*$/, "")}… Architecture diagram, wiki docs, code tours and Q&A.`
-    : `How ${owner}/${repo} works: architecture diagram, wiki docs, code tours and Q&A, read whole by DeepSeek V4.1 Flash 1017.`;
+    : `How ${owner}/${repo} works: architecture diagram, wiki docs, code tours and Q&A, read whole in one prompt.`;
   return {
     title,
     description,
